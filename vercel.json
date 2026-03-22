@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/jobs/resume-reminders",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/jobs/beta-feedback-followups",
+      "schedule": "30 13 * * *"
+    }
+  ]
+}

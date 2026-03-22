@@ -1,0 +1,43 @@
+<svg width="1180" height="260" viewBox="0 0 1180 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lockup-arch" x1="42" y1="28" x2="220" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#54B7CA"/>
+      <stop offset="1" stop-color="#2D8D8F"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(24 18)">
+    <path
+      d="M20 130C27 72 69 34 124 34C174 34 216 66 226 116"
+      stroke="url(#lockup-arch)"
+      stroke-width="18"
+      stroke-linecap="round"
+    />
+    <path
+      d="M24 136C52 154 97 154 131 134C163 114 202 111 232 127"
+      stroke="#2D8D8F"
+      stroke-width="20"
+      stroke-linecap="round"
+    />
+    <path
+      d="M50 175C81 191 121 191 156 173C182 160 205 157 224 165"
+      stroke="#F2A77A"
+      stroke-width="14"
+      stroke-linecap="round"
+    />
+    <path
+      d="M76 202C103 211 134 210 163 200"
+      stroke="#1F2340"
+      stroke-opacity="0.7"
+      stroke-width="6"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <text x="296" y="118" fill="#1F2340" font-size="80" font-family="'Fraunces', Georgia, serif" letter-spacing="0.5">
+    RestShore
+  </text>
+  <text x="300" y="164" fill="#5D6178" font-size="28" font-family="'Space Grotesk', Arial, sans-serif">
+    A calmer, structured way to rebuild sleep
+  </text>
+</svg>

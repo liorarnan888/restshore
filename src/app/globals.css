@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7efe4;
+  --foreground: #1f2340;
+  --surface: rgba(255, 251, 246, 0.78);
+  --surface-strong: #fffaf2;
+  --muted: #6f6c7e;
+  --line: rgba(35, 42, 75, 0.12);
+  --accent: #f57f5b;
+  --accent-strong: #eb5d34;
+  --accent-soft: rgba(245, 127, 91, 0.15);
+  --teal: #2d8d8f;
+  --yellow: #f6c667;
+  --shadow: 0 24px 80px rgba(37, 38, 70, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-space-grotesk);
+  --font-display: var(--font-fraunces);
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(246, 198, 103, 0.52), transparent 26%),
+    radial-gradient(circle at top right, rgba(45, 141, 143, 0.24), transparent 22%),
+    radial-gradient(circle at 20% 80%, rgba(255, 255, 255, 0.62), transparent 24%),
+    linear-gradient(180deg, #f8efe2 0%, #f5f1ea 45%, #edf3f1 100%);
+  color: var(--foreground);
+  font-family: var(--font-space-grotesk), sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(245, 127, 91, 0.24);
+}
+
+.display {
+  font-family: var(--font-fraunces), serif;
+}
+
+.glass-panel {
+  backdrop-filter: blur(14px);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.soft-ring {
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 0 0 8px rgba(245, 127, 91, 0.07);
+}
+
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.95' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  border-radius: inherit;
+  opacity: 0.55;
+}
+
+.editorial-card {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.92), rgba(255, 247, 236, 0.74));
+  box-shadow:
+    0 24px 60px rgba(31, 35, 64, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.panel-lift {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.panel-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 22px 42px rgba(31, 35, 64, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.ink-divider {
+  position: relative;
+}
+
+.ink-divider::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -10px;
+  width: 72px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(235, 93, 52, 0.92), rgba(246, 198, 103, 0.9));
+}
