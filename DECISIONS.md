@@ -125,3 +125,44 @@ If a scenario does not fall into one of these rule families, it should not chang
 
 - Decision: show simulated nightly logs, triggered rules, user-facing summaries, and exact before/after diffs.
 - Reason: future adaptation behavior must be inspectable, not magical.
+
+### 15. Public marketing language
+
+- Decision: public-facing homepage and acquisition copy must stay in `behavioral support` / `CBT-I-inspired` language.
+- It should:
+  - describe CBT-I as a well-studied behavioral framework
+  - position RestShore as structure, coaching, planning, and implementation support
+  - keep a non-medical public tone
+- It should not:
+  - imply diagnosis
+  - imply treatment or cure
+  - claim medical outcomes
+  - assume the user has a specific condition in ad-style copy
+
+### 16. Start page mobile compactness
+
+- Decision: `/start` is not a second landing page.
+- On mobile:
+  - the first question should appear as high as possible
+  - no unnecessary duration copy should appear inside the intake shell
+  - no duplicate section labels should appear above the first question
+  - the top shell should use only the minimum orientation needed to start
+  - if the page still reads clearly without an intro paragraph, prefer removing it
+- Reason: the user already chose to start; the page should feel like the questionnaire has begun.
+
+### 17. Report page state model
+
+- Decision: the report has exactly two product states on the same route:
+  - not connected
+  - connected
+- Not connected:
+  - the report stands on its own
+  - it has one primary action only: connect Google to add the plan to Calendar
+- Connected:
+  - the report becomes the current source of truth for the live plan
+  - account controls stay secondary
+  - `What changed and why` appears only when a meaningful update exists
+- The report must not behave like:
+  - a delivery center
+  - an ops dashboard
+  - a beta/debug surface

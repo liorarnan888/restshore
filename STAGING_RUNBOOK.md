@@ -11,10 +11,18 @@ This app now has a live Vercel staging setup on `https://restshore.com`.
 - Database: existing hosted PostgreSQL from `DATABASE_URL`
 - Prisma schema: already synced to the hosted database
 - Email: configured through the current Resend credentials in Vercel
+- Production Test Center: protected by an internal password gate
 - Root domain: connected to the Vercel project
 - Framework preset: `Next.js`
 - Node.js version: `22.x`
 - Vercel Authentication wall: disabled for this project
+
+## Product inboxes
+
+The current public inboxes for the product are:
+
+- `hello@restshore.com` for general product contact
+- `support@restshore.com` for support, privacy, Google Calendar issues, and data requests
 
 ## What was already done
 
@@ -30,6 +38,7 @@ The following setup has already been completed:
   - `NEXT_PUBLIC_APP_URL`
   - `RESEND_API_KEY`
   - `RESEND_FROM_EMAIL`
+  - `TEST_CENTER_PASSWORD`
 - Synced the Prisma schema against the hosted Postgres database
 - Deployed the app to Vercel production
 - Attached `restshore.com` to the project
@@ -78,24 +87,34 @@ The app can use the current Resend credentials, but the long-term recommended se
 Use this as the plain-English preflight before any approval or launch review:
 
 1. Confirm the public homepage, privacy page, terms page, and CBT-I support pages load without sign-in.
-2. Confirm `https://restshore.com/test-center` and `https://restshore.com/launch-insights` stay private in production.
-3. Confirm Google Cloud includes:
+2. Confirm `https://restshore.com/test-center` prompts for the internal password in production, and `https://restshore.com/launch-insights` stays key-protected.
+3. Confirm production env includes `TEST_CENTER_PASSWORD` and a valid `AUTH_SECRET`.
+4. Confirm Google Cloud includes:
    - the exact live origin `https://restshore.com`
    - the exact live redirect URI `https://restshore.com/api/auth/callback/google`
    - the Calendar handoff scope `https://www.googleapis.com/auth/calendar.app.created`
-4. Confirm Resend has a verified sender that can send to real users, not just onboarding test traffic.
-5. Run the end-to-end happy path on the live domain:
+5. Confirm Resend has a verified sender that can send to real users, not just onboarding test traffic.
+6. Run the end-to-end happy path on the live domain:
    - intake
    - early email capture
    - Google sign-in
    - calendar creation
    - daily check-in
    - one follow-up update
-6. Confirm the final status is understandable:
+7. Confirm the final status is understandable:
    - report delivered
    - calendar synced
    - daily log updated
    - no unresolved `failed` state
+
+## Report card QA invariants
+
+Treat these as required on the live domain:
+
+- While calendar sync is building, do not show a primary CTA that invites the user to add the plan again.
+- After Google disconnects, show a reconnect path and hide remove-calendar controls.
+- Only offer remove-calendar when an authenticated Google session can actually execute it.
+- On mobile, the not-connected report card must keep the heading and body readable without side-by-side squeeze.
 
 ## Notes for review
 

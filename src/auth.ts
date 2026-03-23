@@ -36,9 +36,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (account?.provider === "google") {
         token.googleAccessToken = account.access_token;
-        token.googleRefreshToken = account.refresh_token;
+        token.googleRefreshToken =
+          account.refresh_token ??
+          (typeof token.googleRefreshToken === "string"
+            ? token.googleRefreshToken
+            : null);
         token.googleExpiresAt = account.expires_at ?? null;
-        token.googleScope = account.scope ?? null;
+        token.googleScope =
+          account.scope ??
+          (typeof token.googleScope === "string" ? token.googleScope : null);
       }
 
       return token;

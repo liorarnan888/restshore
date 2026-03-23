@@ -572,7 +572,7 @@ const lessons: MicroLessonCard[] = [
     title: "The goal is not one perfect night. The goal is six weeks of better signals.",
     body: "Strong sleep plans are built from repeatable cues, clear experiments, and enough structure to learn from setbacks. That is what creates traction.",
     insight:
-      "Your report will include a week-by-week path, not a pile of disconnected tips.",
+      "Next, we'll show what seems to be shaping your sleep and the starting structure built from your answers.",
     accent: "Six-week arc",
   },
 ];

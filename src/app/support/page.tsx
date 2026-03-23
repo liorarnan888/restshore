@@ -4,6 +4,7 @@ import { ContentPageShell } from "@/components/launch/content-page-shell";
 import {
   appSupportPromise,
   brandName,
+  helloEmail,
   policyEffectiveDate,
   supportEmail,
   supportMailto,
@@ -26,6 +27,8 @@ export default function SupportPage() {
       <section>
         <h2 className="display text-3xl text-[color:var(--foreground)]">How to reach us</h2>
         <p className="mt-3">
+          General product contact lives at{" "}
+          <span className="font-medium text-[color:var(--foreground)]">{helloEmail}</span>. Use{" "}
           Email{" "}
           <a
             href={supportMailto("RestShore support request")}

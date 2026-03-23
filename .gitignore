@@ -46,3 +46,6 @@ next-env.d.ts
 /data/
 /output/
 /tmp/
+.codex/
+.tmp.*
+vercel-auth-runtime.log

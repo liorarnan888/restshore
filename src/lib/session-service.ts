@@ -8,6 +8,7 @@ import {
   isValidDailyCheckInToken,
   reconcileDailyCheckInsForPlan,
   upsertDailyCheckIn,
+  validateLoggedSleepTimes,
 } from "@/lib/daily-checkin";
 import {
   deleteCalendarProgram,
@@ -20,6 +21,7 @@ import {
 import { feedbackFollowUpDelayHours } from "@/lib/brand";
 import { hasFeedbackForSession, recordAnalyticsEvent } from "@/lib/launch-data";
 import { buildGeneratedPlan, buildSleepProfile } from "@/lib/plan-engine";
+import { buildReportPlanView } from "@/lib/report-plan";
 import { getQuestionById, normaliseAnswer } from "@/lib/questionnaire";
 import { buildGeneratedReport } from "@/lib/report";
 import {
@@ -77,7 +79,8 @@ async function resolveGoogleAuthContext(
   authContext?: GoogleAuthContext,
 ) {
   const storedAccount =
-    !authContext?.accessToken && session.userId
+    session.userId &&
+    (!authContext?.accessToken || !authContext?.refreshToken || !authContext?.expiresAt)
       ? await getStoredGoogleAccount(session.userId)
       : null;
 
@@ -115,6 +118,11 @@ async function refreshDailyCheckInState(
     reconciledPlanResult.plan,
     session.dailyCheckIns,
   );
+  const nextPlan = adaptedPlanResult.plan;
+  const reportView = buildReportPlanView(nextPlan, session.dailyCheckIns);
+  const reportViewChanged =
+    JSON.stringify(session.generatedPlan?.reportView ?? null) !==
+    JSON.stringify(reportView);
   const changedEventIds = [
     ...new Set([
       ...upgradedPlanResult.changedEventIds,
@@ -123,10 +131,10 @@ async function refreshDailyCheckInState(
       ...adaptedPlanResult.changedEventIds,
     ]),
   ];
-  const nextPlan = adaptedPlanResult.plan;
   const planChanged =
     changedEventIds.length > 0 ||
-    nextPlan !== session.generatedPlan;
+    nextPlan !== session.generatedPlan ||
+    reportViewChanged;
 
   if (!planChanged) {
     return session;
@@ -134,7 +142,10 @@ async function refreshDailyCheckInState(
 
   const updatedSession: IntakeSession = {
     ...session,
-    generatedPlan: nextPlan,
+    generatedPlan: {
+      ...nextPlan,
+      reportView,
+    },
     updatedAt: new Date().toISOString(),
   };
 
@@ -157,6 +168,38 @@ async function refreshDailyCheckInState(
     );
   }
 
+  return updatedSession;
+}
+
+async function repairGeneratedReportIfNeeded(session: IntakeSession) {
+  if (!session.generatedPlan || !session.generatedReport) {
+    return session;
+  }
+
+  const currentSummary = [
+    ...(session.generatedReport.clinicianSummary ?? []),
+    ...(session.generatedReport.sections ?? []).flatMap((section) => [
+      section.title,
+      section.body,
+      ...(section.bullets ?? []),
+    ]),
+  ].join("\n");
+  const looksLegacy = /13 months|1 3 months|Current pattern:/i.test(currentSummary);
+
+  if (!looksLegacy) {
+    return session;
+  }
+
+  const profile = buildSleepProfile(session.answers, session.timezone);
+  const freshReport = buildGeneratedReport(profile, session.generatedPlan);
+
+  const updatedSession: IntakeSession = {
+    ...session,
+    generatedReport: freshReport,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await saveSession(updatedSession);
   return updatedSession;
 }
 
@@ -234,7 +277,52 @@ export async function getSession(sessionId: string) {
     return null;
   }
 
-  return refreshDailyCheckInState(session);
+  return repairGeneratedReportIfNeeded(await refreshDailyCheckInState(session));
+}
+
+export async function findPreferredSessionForAccount({
+  userId,
+  email,
+}: {
+  userId?: string;
+  email?: string | null;
+}) {
+  const normalizedEmail = email?.trim().toLowerCase();
+  const sessions = await listSessions();
+  const matchingSessions = sessions.filter((session) => {
+    if (userId && session.userId === userId) {
+      return true;
+    }
+
+    if (
+      normalizedEmail &&
+      session.email?.trim().toLowerCase() === normalizedEmail
+    ) {
+      return true;
+    }
+
+    return false;
+  });
+
+  if (!matchingSessions.length) {
+    return null;
+  }
+
+  const withPlan = matchingSessions
+    .filter((session) => session.generatedPlan && session.generatedReport)
+    .sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
+
+  if (withPlan.length) {
+    return withPlan[0];
+  }
+
+  return matchingSessions.sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  )[0];
 }
 
 export async function saveAnswer(
@@ -312,12 +400,17 @@ export async function finalizeSession(sessionId: string) {
     session.id,
     session.resumeToken,
   ).plan;
-  const generatedReport = buildGeneratedReport(profile, generatedPlan);
+  const reportView = buildReportPlanView(generatedPlan);
+  const generatedPlanWithReportView = {
+    ...generatedPlan,
+    reportView,
+  };
+  const generatedReport = buildGeneratedReport(profile, generatedPlanWithReportView);
   const updatedSession: IntakeSession = {
     ...session,
     status: "ready_for_google",
     currentStepId: "connect_google",
-    generatedPlan,
+    generatedPlan: generatedPlanWithReportView,
     generatedReport,
     calendarSyncState: undefined,
     updatedAt: new Date().toISOString(),
@@ -359,6 +452,7 @@ export async function connectGoogleAndDeliver(
   }
 
   session = await refreshDailyCheckInState(session, authContext);
+  session = await repairGeneratedReportIfNeeded(session);
 
   if (!session.generatedPlan || !session.generatedReport) {
     throw new Error("Session not ready");
@@ -552,6 +646,20 @@ export async function submitDailyCheckIn(
     throw new Error("This night has not ended yet");
   }
 
+  const timeValidation = validateLoggedSleepTimes(
+    entry.actualInBedTime,
+    entry.actualOutOfBedTime,
+    draftDefaults.plannedBedtime,
+    draftDefaults.plannedWakeTime,
+  );
+
+  if (!timeValidation.valid) {
+    throw new Error(
+      timeValidation.message ??
+        "Those sleep times do not look like one overnight sleep period.",
+    );
+  }
+
   const previousLogCount = refreshedSession.dailyCheckIns?.length ?? 0;
   const sessionWithLog = upsertDailyCheckIn(refreshedSession, {
     ...entry,
@@ -560,7 +668,9 @@ export async function submitDailyCheckIn(
     checkInEventId: draftDefaults.checkInEventId,
   });
   const savedSession = await saveSession(sessionWithLog);
-  const nextSession = await refreshDailyCheckInState(savedSession, authContext);
+  const nextSession = await refreshDailyCheckInState(savedSession, authContext, {
+    syncCalendar: false,
+  });
   const nextSleepEvent =
     nextSession.generatedPlan?.events.find(
       (event) => event.id === draftDefaults.sleepEventId,
@@ -593,6 +703,31 @@ export async function submitDailyCheckIn(
     draftDefaults: buildDailyCheckInDraftDefaults(nextSession, nightDate),
     sleepEvent: nextSleepEvent,
     adaptiveSummary,
+  };
+}
+
+export async function syncDailyCheckInCalendar(
+  sessionId: string,
+  nightDate: string,
+  token: string,
+  authContext?: GoogleAuthContext,
+) {
+  const session = await getSessionById(sessionId);
+
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
+  if (!isValidDailyCheckInToken(session.resumeToken, nightDate, token)) {
+    throw new Error("Invalid check-in token");
+  }
+
+  const refreshedSession = await refreshDailyCheckInState(session, authContext, {
+    syncCalendar: true,
+  });
+
+  return {
+    session: refreshedSession,
   };
 }
 

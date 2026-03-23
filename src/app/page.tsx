@@ -1,280 +1,186 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
-import { BetaFeedbackCard } from "@/components/launch/beta-feedback-card";
+import { ContinueWithGoogleButton } from "@/components/launch/continue-with-google-button";
 import { LaunchPageView } from "@/components/launch/launch-page-view";
-import { IntakeExperience } from "@/components/intake/intake-experience";
-import {
-  appSupportPromise,
-  betaFeedbackMessage,
-  betaLabel,
-  brandDescription,
-  brandName,
-  brandTagline,
-  supportEmail,
-  supportMailto,
-} from "@/lib/brand";
+import { appSupportPromise, betaLabel, brandName } from "@/lib/brand";
+import { isGoogleAuthConfigured } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-const launchHighlights = [
-  "Free public beta",
-  "6-week plan",
-  "Optional Google calendar",
-  "Doctor-ready report",
+const steps = [
+  {
+    number: "01",
+    title: "Tell us what sleep has looked like",
+    detail: "A short questionnaire that stays focused and personal.",
+  },
+  {
+    number: "02",
+    title: "Get your plan and summary",
+    detail: "A personal sleep structure built from your answers, not generic advice.",
+  },
+  {
+    number: "03",
+    title: "Put the structure on your calendar",
+    detail: "Google only appears at the end, if you want the plan to live there.",
+  },
 ];
 
 export default function Home() {
+  const googleEnabled = isGoogleAuthConfigured();
+
   return (
-    <main className="relative overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
-      <LaunchPageView route="/" metadata={{ surface: "homepage" }} />
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4">
-        <header className="flex items-center justify-between rounded-full border border-white/60 bg-white/55 px-4 py-3 text-sm text-[color:var(--muted)] shadow-[0_18px_40px_rgba(31,35,64,0.08)] backdrop-blur md:px-5">
+    <main className="relative overflow-hidden px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+      <LaunchPageView route="/" metadata={{ surface: "homepage", version: "refined_v3" }} />
+      <div className="pointer-events-none absolute -left-16 top-8 h-56 w-56 rounded-full bg-[rgba(246,198,103,.14)] blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-24 h-72 w-72 rounded-full bg-[rgba(45,141,143,.1)] blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/3 h-56 w-56 rounded-full bg-[rgba(255,255,255,.24)] blur-3xl" />
+
+      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10">
+        <header className="flex flex-col gap-4 py-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <BrandLogo
-              variant="mark"
-              className="h-10 w-10 shrink-0 md:hidden"
-              priority
-            />
-            <BrandLogo
-              variant="lockup"
-              className="hidden h-11 w-auto shrink-0 md:block"
-              priority
-            />
+            <BrandLogo variant="mark" className="h-11 w-11 shrink-0 md:hidden" priority />
+            <BrandLogo variant="lockup" className="hidden h-11 w-auto shrink-0 md:block" priority />
             <div className="md:hidden">
-              <p className="display text-lg text-[color:var(--foreground)]">
-                {brandName}
-              </p>
-              <p className="text-xs">{brandTagline}</p>
+              <p className="display text-lg text-[color:var(--foreground)]">{brandName}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="hidden rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 md:block">
-              {betaLabel} | no billing | early access
+
+          {googleEnabled ? (
+            <div className="flex flex-wrap items-center gap-1 text-sm text-[color:var(--muted)]">
+              <span>Already have a plan?</span>
+              <ContinueWithGoogleButton label="Continue with Google" variant="link" />
             </div>
-            {process.env.NODE_ENV !== "production" ? (
-              <>
-                <Link
-                  href="/launch-insights"
-                  className="hidden rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 font-medium text-[color:var(--foreground)] lg:block"
-                >
-                  Launch Insights
-                </Link>
-                <Link
-                  href="/test-center"
-                  className="hidden rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 font-medium text-[color:var(--foreground)] lg:block"
-                >
-                  Open Test Center
-                </Link>
-              </>
-            ) : null}
-          </div>
+          ) : null}
         </header>
 
-        <section className="relative overflow-hidden rounded-[30px] border border-white/70 bg-[linear-gradient(145deg,rgba(255,249,240,0.96),rgba(255,255,255,0.72))] p-4 shadow-[0_18px_48px_rgba(31,35,64,0.08)] sm:p-5">
-          <div className="grain absolute inset-0 rounded-[34px]" />
-          <div className="pointer-events-none absolute -right-24 top-12 h-44 w-44 rounded-full bg-[rgba(45,141,143,.08)] blur-3xl" />
-          <div className="pointer-events-none absolute -left-16 bottom-6 h-40 w-40 rounded-full bg-[rgba(245,127,91,.10)] blur-3xl" />
+        <section className="relative grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div className="max-w-xl">
+            <p className="text-xs font-medium uppercase tracking-[0.22em] text-[color:var(--teal)]">
+              {betaLabel}
+            </p>
+            <h1 className="display mt-3 text-[2.2rem] leading-[0.98] text-[color:var(--foreground)] sm:text-[3.15rem]">
+              <span className="block">CBT-I, made practical.</span>
+              <span className="block">A personal sleep plan you can actually follow.</span>
+            </h1>
+            <p className="mt-4 text-[0.98rem] leading-7 text-[color:var(--muted)] sm:text-base sm:leading-7">
+              CBT-I is a well-studied behavioral framework for improving sleep habits and routines. The hard part is access: time, cost, scheduling, and the work of turning guidance into real life.
+            </p>
+            <p className="mt-3 text-[0.98rem] leading-7 text-[color:var(--foreground)] sm:text-base sm:leading-7">
+              {brandName} is built around CBT-I-inspired structure and turns it into a personal plan, a clear summary, and an optional calendar you can actually use.
+            </p>
 
-          <div className="relative grid gap-5 lg:grid-cols-[1.02fr_0.98fr] lg:items-end">
-            <div className="space-y-3">
-              <span className="inline-flex rounded-full border border-[color:var(--line)] bg-white/80 px-4 py-2 text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
-                {betaLabel}
-              </span>
-              <h1 className="display max-w-3xl text-2xl font-semibold leading-[1.06] text-[color:var(--foreground)] sm:text-3xl lg:text-[2.7rem]">
-                CBT-I informed sleep coaching for calmer nights, clearer mornings, and a plan you
-                can actually follow.
-              </h1>
-              <p className="max-w-2xl text-sm leading-7 text-[color:var(--muted)]">
-                {brandDescription}
-              </p>
-              <p className="max-w-2xl text-sm leading-7 text-[color:var(--foreground)]">
-                {betaFeedbackMessage}
-              </p>
-              <p className="max-w-2xl text-sm leading-7 text-[color:var(--muted)]">
-                Google is optional and only appears after the intake if you want a dedicated
-                RestShore calendar in your own Google account.
+            <div className="mt-6 flex flex-col items-start gap-3">
+              <Link
+                href="/start"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[linear-gradient(90deg,var(--accent-strong),var(--accent))] px-6 py-3.5 font-medium text-white shadow-[0_18px_32px_rgba(235,93,52,.24)] transition hover:-translate-y-0.5 sm:w-auto"
+              >
+                Start the questionnaire
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+              <p className="text-sm leading-6 text-[color:var(--muted)]">
+                You&apos;ll leave with a personal sleep summary, a 6-week starting plan, and an optional calendar version. No Google required to start.
               </p>
             </div>
+          </div>
 
-            <div className="grid gap-3 lg:justify-items-end">
-              <div className="relative w-full max-w-[500px] overflow-hidden rounded-[32px] border border-white/80 bg-white/70 p-2 shadow-[0_18px_40px_rgba(31,35,64,0.08)]">
-                <Image
-                  src="/restshore/hero-illustration.png"
-                  alt="Abstract RestShore hero illustration with layered night-to-morning shapes"
-                  width={1536}
-                  height={1024}
-                  className="h-auto w-full rounded-[26px] object-cover"
-                  priority
-                />
-                <div className="pointer-events-none absolute inset-x-6 bottom-6 rounded-[24px] border border-white/70 bg-[rgba(255,250,244,0.84)] p-4 backdrop-blur">
-                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[color:var(--teal)]">
-                    {brandName} launch visual
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
-                    A dawn-facing illustration system for a calmer six-week story, with breathing room for trust and clarity.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid w-full gap-2 sm:grid-cols-2 lg:max-w-[500px]">
-                {launchHighlights.map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-white/80 bg-white/78 px-4 py-2 text-center text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--foreground)] shadow-[0_10px_24px_rgba(31,35,64,0.06)]"
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
+          <div className="relative overflow-hidden rounded-[30px] border border-white/80 bg-[rgba(255,255,255,0.72)] p-2 shadow-[0_20px_44px_rgba(31,35,64,0.08)]">
+            <Image
+              src="/restshore/hero-illustration.png"
+              alt="RestShore illustration with calm night-to-morning forms"
+              width={1536}
+              height={1024}
+              className="h-auto w-full rounded-[24px] object-cover"
+              priority
+            />
+            <div className="absolute bottom-4 left-4 right-4 max-w-[340px] rounded-[22px] border border-white/75 bg-[rgba(255,248,239,0.92)] px-4 py-4 backdrop-blur">
+              <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-[color:var(--teal)]">
+                What you get
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">
+                Not another pile of sleep advice. A personal plan, a clear summary, and an optional calendar built from your answers.
+              </p>
             </div>
           </div>
         </section>
 
-        <section className="pb-2">
-          <IntakeExperience />
+        <section className="max-w-3xl rounded-[8px] border-l-2 border-[rgba(31,35,64,.12)] pl-5">
+          <p className="text-xs font-medium uppercase tracking-[0.22em] text-[color:var(--teal)]">
+            Why this exists
+          </p>
+          <h2 className="display mt-3 text-3xl leading-[1.04] text-[color:var(--foreground)]">
+            The method is not the problem. Getting it into real life is.
+          </h2>
+          <div className="mt-5 grid gap-4 text-base leading-7 text-[color:var(--muted)]">
+            <p>
+              People do not just need to hear that sleep needs structure. They need a structure that fits their own pattern, arrives in a usable form, and is easier to follow when the night gets hard.
+            </p>
+            <p>
+              That is the job of RestShore: take what usually gets spread across appointments, notes, and recommendations, and turn it into something concrete, personal, and easier to carry into daily life.
+            </p>
+          </div>
         </section>
 
-        <section className="grid gap-4 pb-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <article className="glass-panel editorial-card rounded-[32px] border border-white/75 p-6">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
-              Before you start
+        <section className="grid gap-4">
+          <div className="max-w-xl">
+            <p className="text-xs font-medium uppercase tracking-[0.22em] text-[color:var(--teal)]">
+              How it works
             </p>
-            <h2 className="display mt-3 text-3xl text-[color:var(--foreground)]">
-              What this beta is
+            <h2 className="display mt-3 text-[2.2rem] leading-[1.02] text-[color:var(--foreground)]">
+              A short path from answers to structure.
             </h2>
-            <div className="mt-4 grid gap-3 text-sm leading-6 text-[color:var(--muted)]">
-              <p>
-                {brandName} turns a guided intake into a six-week rhythm, a doctor-ready sleep
-                report, and an optional calendar structure you can actually follow.
-              </p>
-              <p>
-                There is no billing in this version and no paid acquisition behind it. We are
-                starting with people who are comfortable trying a thoughtful early product and
-                telling us what holds up.
-              </p>
-              <p>
-                If you choose Google Calendar at the end, RestShore asks only for the access
-                needed to create and manage the dedicated RestShore calendar it adds for you.
-                It does not take over your main calendar.
-              </p>
-              <p>{appSupportPromise}</p>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3 text-sm">
-              <Link
-                href="/privacy"
-                className="rounded-full border border-[color:var(--line)] bg-white/85 px-4 py-2 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {steps.map((step) => (
+              <article
+                key={step.number}
+                className="rounded-[26px] border border-[rgba(31,35,64,.10)] bg-[rgba(255,255,255,.68)] px-5 py-5 shadow-[0_14px_30px_rgba(31,35,64,0.05)]"
               >
+                <p className="text-sm font-medium uppercase tracking-[0.22em] text-[color:var(--teal)]">
+                  {step.number}
+                </p>
+                <h3 className="mt-4 text-lg font-semibold leading-7 text-[color:var(--foreground)]">
+                  {step.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                  {step.detail}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-white/80 bg-[rgba(255,250,244,0.75)] px-5 py-5 shadow-[0_16px_34px_rgba(31,35,64,0.06)] sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-[color:var(--teal)]">
+                Google and trust
+              </p>
+              <p className="mt-3 text-base leading-7 text-[color:var(--foreground)]">
+                New users start with the questionnaire. Google only appears at the end, if you want the calendar. If you already have a plan, you can continue with Google and get back to it.
+              </p>
+              <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+                {appSupportPromise}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                Public-facing content is educational and behavioral in nature. It is not medical care, diagnosis, or emergency support.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-4 text-sm text-[color:var(--muted)]">
+              <Link href="/privacy" className="transition hover:text-[color:var(--foreground)]">
                 Privacy
               </Link>
-              <Link
-                href="/terms"
-                className="rounded-full border border-[color:var(--line)] bg-white/85 px-4 py-2 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
-              >
+              <Link href="/terms" className="transition hover:text-[color:var(--foreground)]">
                 Terms
               </Link>
-              <Link
-                href="/support"
-                className="rounded-full border border-[color:var(--line)] bg-white/85 px-4 py-2 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
-              >
+              <Link href="/support" className="transition hover:text-[color:var(--foreground)]">
                 Support
               </Link>
             </div>
-          </article>
-
-          <BetaFeedbackCard
-            source="homepage"
-            title={`Help shape ${brandName}`}
-            description="If you have been through the product or even just the homepage, tell us what feels promising or confusing. We are using early notes to tighten the first public beta."
-          />
-        </section>
-
-        <section className="grid gap-4 pb-2 lg:grid-cols-[1.05fr_0.95fr]">
-          <article className="glass-panel editorial-card rounded-[32px] border border-white/75 p-6">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
-              Google and trust
-            </p>
-            <h2 className="display mt-3 text-3xl text-[color:var(--foreground)]">
-              What Google access is for
-            </h2>
-            <div className="mt-4 grid gap-3 text-sm leading-6 text-[color:var(--muted)]">
-              <p>
-                RestShore uses Google sign-in only after the intake, and only if you choose to
-                add your plan to Google Calendar.
-              </p>
-              <p>
-                The product creates and manages a dedicated RestShore calendar in your account so
-                your sleep plan stays separate from your main calendar.
-              </p>
-              <p>
-                You can remove that calendar and revoke Google access at any time.
-              </p>
-              <p>
-                RestShore&apos;s use of information received from Google APIs adheres to the Google API
-                Services User Data Policy, including the Limited Use requirements.
-              </p>
-            </div>
-          </article>
-
-          <article className="glass-panel editorial-card rounded-[32px] border border-white/75 p-6">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
-              Help and contact
-            </p>
-            <h2 className="display mt-3 text-3xl text-[color:var(--foreground)]">
-              Need support, account help, or data deletion?
-            </h2>
-            <div className="mt-4 grid gap-3 text-sm leading-6 text-[color:var(--muted)]">
-              <p>
-                Email{" "}
-                <a
-                  className="font-medium text-[color:var(--foreground)] underline decoration-[color:var(--line)] underline-offset-4"
-                  href={supportMailto("RestShore support request")}
-                >
-                  {supportEmail}
-                </a>{" "}
-                or open the support page for Google access, calendar removal, and data deletion
-                instructions.
-              </p>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3 text-sm">
-              <Link
-                href="/support"
-                className="rounded-full bg-[linear-gradient(90deg,var(--accent-strong),var(--accent))] px-4 py-2 font-medium text-white shadow-[0_18px_32px_rgba(235,93,52,.24)] transition hover:-translate-y-0.5"
-              >
-                Open support
-              </Link>
-              <a
-                href={supportMailto("RestShore support request")}
-                className="rounded-full border border-[color:var(--line)] bg-white/85 px-4 py-2 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
-              >
-                Email support
-              </a>
-            </div>
-          </article>
-        </section>
-
-        <section className="glass-panel editorial-card rounded-[32px] border border-white/75 p-6">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
-            Explore more
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3 text-sm">
-            {[
-              { href: "/what-is-cbti", label: "What is CBT-I?" },
-              { href: "/sleep-diary", label: "Why a sleep diary helps" },
-              { href: "/trouble-falling-asleep", label: "Trouble falling asleep" },
-              { href: "/wake-time-problems", label: "Why wake time matters" },
-              { href: "/insomnia-support", label: "Insomnia support" },
-              { href: "/support", label: "Support" },
-            ].map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="rounded-full border border-[color:var(--line)] bg-white/85 px-4 py-2 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
-              >
-                {link.label}
-              </Link>
-            ))}
           </div>
         </section>
       </div>

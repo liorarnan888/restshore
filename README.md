@@ -26,9 +26,9 @@ Before a Google production review or live staging pass, verify these in plain la
   - privacy
   - terms
   - CBT-I support pages
-- Test-only pages stay hidden in production:
-  - `/test-center`
-  - `/launch-insights`
+- Internal review pages stay private in production:
+  - `/test-center` is password-protected
+  - `/launch-insights` uses its own internal key
 - Google Cloud has the exact real/staging redirect URIs and origins that the app will use.
 - `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and the Calendar API scope are set.
 - Resend is configured with a verified sender you can actually send from in production.
@@ -39,6 +39,13 @@ Before a Google production review or live staging pass, verify these in plain la
   - calendar creation
   - daily check-in
   - follow-up update
+
+## Product email addresses
+
+These are the current public product inboxes for `restshore.com`:
+
+- `hello@restshore.com` for general product contact
+- `support@restshore.com` for support, privacy, Google Calendar issues, and data requests
 
 ## Run locally
 
@@ -70,7 +77,7 @@ Helpful docs:
 
 - [RELEASE_WORKFLOW.md](C:\Users\USER\Documents\Codex%20-%20CBTi%20-%20Cal\RELEASE_WORKFLOW.md)
 - [GITHUB_SETUP.md](C:\Users\USER\Documents\Codex%20-%20CBTi%20-%20Cal\GITHUB_SETUP.md)
-- [STAGING_RUNBOOK.md](C:\Users\USER\Documents\Codex%20-%20-%20Cal\STAGING_RUNBOOK.md)
+- [STAGING_RUNBOOK.md](C:\Users\USER\Documents\Codex%20-%20CBTi%20-%20Cal\STAGING_RUNBOOK.md)
 
 ## Environment variables
 
@@ -82,9 +89,10 @@ AUTH_SECRET=
 AUTH_GOOGLE_ID=
 AUTH_GOOGLE_SECRET=
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_SUPPORT_EMAIL=support@restshore.app
+NEXT_PUBLIC_SUPPORT_EMAIL=support@restshore.com
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=
+TEST_CENTER_PASSWORD=
 ```
 
 For local-only testing without your own domain, set:
@@ -125,10 +133,11 @@ RESEND_FROM_EMAIL="RestShore <onboarding@resend.dev>"
 6. Set `NEXT_PUBLIC_SUPPORT_EMAIL` to a real monitored inbox that matches the support contact you will expose publicly and in Google OAuth verification.
 7. Configure Resend with a verified sender and set `RESEND_API_KEY` plus `RESEND_FROM_EMAIL`.
    For local testing only, you can skip the domain and use `onboarding@resend.dev`, but Resend only allows that test domain to send to the email address on your own Resend account.
-8. Run:
+8. Set `TEST_CENTER_PASSWORD` to a strong internal password for the production Test Center.
+9. Run:
 
 ```bash
 npm run db:push
 ```
 
-9. Start the app and test the full flow with a real Google account.
+10. Start the app and test the full flow with a real Google account.

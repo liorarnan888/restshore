@@ -114,12 +114,6 @@ export function ContentPageShell({
               >
                 Terms
               </Link>
-              <Link
-                href="/support"
-                className="rounded-full border border-[color:var(--line)] bg-white/85 px-4 py-2 font-medium text-[color:var(--foreground)]"
-              >
-                Support
-              </Link>
             </div>
           </article>
         </section>

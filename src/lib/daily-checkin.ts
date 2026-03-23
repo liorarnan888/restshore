@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
-import { addDays, format, set } from "date-fns";
+import { addDays, addHours, format, set } from "date-fns";
 
+import { appBaseUrl } from "@/lib/brand";
 import type {
   DailySleepCheckIn,
   GeneratedPlan,
@@ -10,15 +11,12 @@ import type {
 } from "@/lib/types";
 
 const missingSleepTitle = "Sleep - not logged";
-const protectedSleepWindowTitle = "🛏️ Protected sleep window";
+const protectedSleepWindowTitle = "🛌 Protected sleep window";
 const inBedPracticeTitle = "🛏️ In-bed practice";
 const dailyCheckInTitle = "🌅 Morning sleep log";
 const dailyCheckInDescription =
   "Take 30 to 60 seconds to log the night that just ended. It keeps your plan tied to what actually happened, not memory alone.";
-
-function appBaseUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
+const dailyCheckInDelayHours = 5;
 
 function buildFormatter(
   timeZone: string,
@@ -98,9 +96,107 @@ function resolveNearestClockTime(value: string, anchorIso: string) {
   });
 }
 
+function buildClockCandidates(value: string, anchorIso: string, radius = 1) {
+  const anchor = new Date(anchorIso);
+  const [hours, minutes] = value.split(":").map(Number);
+  const anchorDate = set(anchor, {
+    hours: Number.isFinite(hours) ? hours : 0,
+    minutes: Number.isFinite(minutes) ? minutes : 0,
+    seconds: 0,
+    milliseconds: 0,
+  });
+
+  return Array.from({ length: radius * 2 + 1 }, (_, index) =>
+    addDays(anchorDate, index - radius),
+  );
+}
+
 function differenceInMinutes(value: string, anchorIso: string) {
   const candidate = resolveNearestClockTime(value, anchorIso);
   return Math.round((candidate.getTime() - new Date(anchorIso).getTime()) / 60000);
+}
+
+type LoggedSleepWindowResolution = {
+  startsAt: string;
+  endsAt: string;
+  usedLoggedTimesForWindow: boolean;
+};
+
+function resolveLoggedSleepWindow(
+  actualInBedTime: string,
+  actualOutOfBedTime: string,
+  plannedStart: string,
+  plannedEnd: string,
+): LoggedSleepWindowResolution {
+  const plannedStartAt = new Date(plannedStart);
+  const plannedEndAt = new Date(plannedEnd);
+  const minimumWindowMinutes = 30;
+  const maximumWindowMinutes = 18 * 60;
+  const startCandidates = buildClockCandidates(actualInBedTime, plannedStart, 1);
+  const endCandidates = buildClockCandidates(actualOutOfBedTime, plannedEnd, 1);
+
+  let bestMatch:
+    | {
+        startsAt: Date;
+        endsAt: Date;
+        durationMinutes: number;
+        score: number;
+      }
+    | null = null;
+
+  for (const startCandidate of startCandidates) {
+    for (const endBaseCandidate of endCandidates) {
+      let endCandidate = endBaseCandidate;
+
+      while (endCandidate.getTime() <= startCandidate.getTime()) {
+        endCandidate = addDays(endCandidate, 1);
+      }
+
+      const startDeltaMinutes = Math.abs(
+        Math.round((startCandidate.getTime() - plannedStartAt.getTime()) / 60000),
+      );
+      const endDeltaMinutes = Math.abs(
+        Math.round((endCandidate.getTime() - plannedEndAt.getTime()) / 60000),
+      );
+      const durationMinutes = Math.round(
+        (endCandidate.getTime() - startCandidate.getTime()) / 60000,
+      );
+      const durationPenalty =
+        durationMinutes < minimumWindowMinutes
+          ? (minimumWindowMinutes - durationMinutes) * 20
+          : durationMinutes > maximumWindowMinutes
+            ? (durationMinutes - maximumWindowMinutes) * 20
+            : 0;
+      const score = startDeltaMinutes + endDeltaMinutes + durationPenalty;
+
+      if (!bestMatch || score < bestMatch.score) {
+        bestMatch = {
+          startsAt: startCandidate,
+          endsAt: endCandidate,
+          durationMinutes,
+          score,
+        };
+      }
+    }
+  }
+
+  if (
+    !bestMatch ||
+    bestMatch.durationMinutes < minimumWindowMinutes ||
+    bestMatch.durationMinutes > maximumWindowMinutes
+  ) {
+    return {
+      startsAt: plannedStart,
+      endsAt: plannedEnd,
+      usedLoggedTimesForWindow: false,
+    };
+  }
+
+  return {
+    startsAt: bestMatch.startsAt.toISOString(),
+    endsAt: bestMatch.endsAt.toISOString(),
+    usedLoggedTimesForWindow: true,
+  };
 }
 
 function coachInterpretation(tags: string[]) {
@@ -221,6 +317,110 @@ export type DailyCheckInDraftSnapshot = {
   earlyWakeBucket?: DailySleepCheckIn["earlyWakeBucket"];
   morningFunction: DailySleepCheckIn["morningFunction"] | "";
 };
+
+export type LoggedSleepTimeValidation = {
+  valid: boolean;
+  message?: string;
+};
+
+function timeToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function circularClockDifference(left: string, right: string) {
+  const leftMinutes = timeToMinutes(left);
+  const rightMinutes = timeToMinutes(right);
+
+  if (leftMinutes === null || rightMinutes === null) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const rawDifference = Math.abs(leftMinutes - rightMinutes);
+  return Math.min(rawDifference, 1440 - rawDifference);
+}
+
+function overnightDurationMinutes(start: string, end: string) {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+
+  if (startMinutes === null || endMinutes === null) {
+    return null;
+  }
+
+  let normalizedEndMinutes = endMinutes;
+
+  if (normalizedEndMinutes <= startMinutes) {
+    normalizedEndMinutes += 1440;
+  }
+
+  return normalizedEndMinutes - startMinutes;
+}
+
+export function validateLoggedSleepTimes(
+  actualInBedTime: string,
+  actualOutOfBedTime: string,
+  plannedBedtime: string,
+  plannedWakeTime: string,
+): LoggedSleepTimeValidation {
+  const minimumWindowMinutes = 30;
+  const maximumWindowMinutes = 18 * 60;
+  const durationMinutes = overnightDurationMinutes(
+    actualInBedTime,
+    actualOutOfBedTime,
+  );
+
+  if (durationMinutes === null) {
+    return {
+      valid: false,
+      message: "Please choose valid times for bedtime and wake time.",
+    };
+  }
+
+  if (durationMinutes < minimumWindowMinutes || durationMinutes > maximumWindowMinutes) {
+    return {
+      valid: false,
+      message:
+        "Those times do not look like one overnight sleep period. Please check the bedtime and the time you got out of bed.",
+    };
+  }
+
+  const bedtimeToPlannedBed = circularClockDifference(actualInBedTime, plannedBedtime);
+  const bedtimeToPlannedWake = circularClockDifference(actualInBedTime, plannedWakeTime);
+
+  if (bedtimeToPlannedWake + 60 < bedtimeToPlannedBed) {
+    return {
+      valid: false,
+      message:
+        "That bedtime looks closer to your wake time than to your planned bedtime. Please check the time you got into bed.",
+    };
+  }
+
+  const wakeToPlannedWake = circularClockDifference(actualOutOfBedTime, plannedWakeTime);
+  const wakeToPlannedBed = circularClockDifference(actualOutOfBedTime, plannedBedtime);
+
+  if (wakeToPlannedBed + 60 < wakeToPlannedWake) {
+    return {
+      valid: false,
+      message:
+        "That wake time looks closer to bedtime than to your planned wake time. Please check the time you got out of bed for good.",
+    };
+  }
+
+  return { valid: true };
+}
 
 export function normalizeDailyCheckInDraft(
   draft: DailyCheckInDraftSnapshot,
@@ -442,10 +642,56 @@ export function ensurePlanHasDailyCheckInEvents(plan: GeneratedPlan) {
 
     return nextEvent;
   });
+  const sleepEventsByNight = new Map(
+    upgradedEvents
+      .filter((event) => event.eventRole === "sleep_window" && event.nightDate)
+      .map((event) => [event.nightDate as string, event]),
+  );
+  const normalizedEvents = upgradedEvents.map((event) => {
+    if (event.eventRole !== "daily_checkin" || !event.nightDate) {
+      return event;
+    }
+
+    const linkedSleepEvent = sleepEventsByNight.get(event.nightDate);
+
+    if (!linkedSleepEvent) {
+      existingCheckInsByNight.add(event.nightDate);
+      return event;
+    }
+
+    const checkInStart = addHours(
+      new Date(linkedSleepEvent.endsAt),
+      dailyCheckInDelayHours,
+    );
+    const nextStartsAt = checkInStart.toISOString();
+    const nextEndsAt = new Date(checkInStart.getTime() + 5 * 60 * 1000).toISOString();
+    const nextDayLabel = format(checkInStart, "EEE, MMM d");
+    const nextEvent =
+      event.startsAt === nextStartsAt &&
+      event.endsAt === nextEndsAt &&
+      event.dayLabel === nextDayLabel
+        ? event
+        : {
+            ...event,
+            startsAt: nextStartsAt,
+            endsAt: nextEndsAt,
+            dayLabel: nextDayLabel,
+          };
+
+    if (nextEvent.nightDate) {
+      existingCheckInsByNight.add(nextEvent.nightDate);
+    }
+
+    if (nextEvent !== event) {
+      changedEventIds.push(event.id);
+    }
+
+    return nextEvent;
+  });
 
   const addedEvents: ProgramEvent[] = [];
 
-  for (const sleepEvent of upgradedEvents) {
+  for (const sleepEvent of normalizedEvents) {
     if (sleepEvent.eventRole !== "sleep_window" || !sleepEvent.nightDate) {
       continue;
     }
@@ -454,8 +700,7 @@ export function ensurePlanHasDailyCheckInEvents(plan: GeneratedPlan) {
       continue;
     }
 
-    const checkInStart = addDays(new Date(sleepEvent.endsAt), 0);
-    checkInStart.setMinutes(checkInStart.getMinutes() + 25);
+    const checkInStart = addHours(new Date(sleepEvent.endsAt), dailyCheckInDelayHours);
 
     const checkInEvent: ProgramEvent = {
       id: `${sleepEvent.nightDate}-checkin-daily-log`,
@@ -488,7 +733,7 @@ export function ensurePlanHasDailyCheckInEvents(plan: GeneratedPlan) {
   return {
     plan: {
       ...plan,
-      events: [...upgradedEvents, ...addedEvents].sort((left, right) =>
+      events: [...normalizedEvents, ...addedEvents].sort((left, right) =>
         left.startsAt.localeCompare(right.startsAt),
       ),
     },
@@ -603,6 +848,7 @@ function buildLoggedOutcomeDescription(
   entry: DailySleepCheckIn,
   sleepEvent: ProgramEvent,
   timeZone: string,
+  usedLoggedTimesForWindow: boolean,
 ) {
   const plannedBedtime = timeLabel(timeValueFromIso(plannedStartIso(sleepEvent), timeZone));
   const plannedWakeTime = timeLabel(timeValueFromIso(plannedEndIso(sleepEvent), timeZone));
@@ -622,6 +868,7 @@ function buildLoggedOutcomeDescription(
     `- Awake during night: ${awakeDuringNightLabel(entry.awakeDuringNightBucket)}`,
     `- Early wake: ${earlyWakeLabel(entry.earlyWakeBucket)}`,
     `- Morning function: ${morningFunctionLabel(entry.morningFunction)}`,
+    `- Event timing updated: ${usedLoggedTimesForWindow ? "yes" : "kept on the planned window because the logged times did not map cleanly to one overnight sleep period"}`,
     "",
     "Coach interpretation",
     `- ${coachInterpretation(tags)}`,
@@ -643,20 +890,21 @@ function applyLoggedStateToSleepEvent(
 ) {
   const baseTitle = event.baseTitle ?? event.title;
   const baseDescription = event.baseDescription ?? event.description;
-  const nextStartsAt = resolveNearestClockTime(
+  const loggedWindow = resolveLoggedSleepWindow(
     entry.actualInBedTime,
-    plannedStartIso(event),
-  );
-  const nextEndsAt = resolveNearestClockTime(
     entry.actualOutOfBedTime,
+    plannedStartIso(event),
     plannedEndIso(event),
   );
+  const nextStartsAt = new Date(loggedWindow.startsAt);
+  const nextEndsAt = new Date(loggedWindow.endsAt);
   const title = buildLoggedSleepTitle(entry.derivedTitleTags);
   const description = buildLoggedOutcomeDescription(
     baseDescription,
     entry,
     event,
     timeZone,
+    loggedWindow.usedLoggedTimesForWindow,
   );
 
   return {

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "calendar-copy:export": "powershell -Command \"$env:CALENDAR_COPY_EXPORT='1'; npx vitest run scripts/export-calendar-copy.test.ts\"",
     "db:generate": "dotenv -e .env.local -- prisma generate",
     "db:push": "dotenv -e .env.local -- prisma db push",
     "postinstall": "prisma generate"

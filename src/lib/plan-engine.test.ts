@@ -1,6 +1,29 @@
-import { buildGeneratedPlan, buildSleepProfile } from "@/lib/plan-engine";
+import {
+  buildGeneratedPlan,
+  buildSleepProfile,
+  datePartsToUtcInstant,
+} from "@/lib/plan-engine";
+
+function formatTimeInZone(date: Date, timeZone: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
 
 describe("plan engine", () => {
+  it("converts wall-clock times in the user timezone to the correct UTC instant", () => {
+    const instant = datePartsToUtcInstant(
+      { year: 2026, month: 3, day: 23 },
+      { hours: 7, minutes: 0 },
+      "Asia/Bangkok",
+    );
+
+    expect(instant.toISOString()).toBe("2026-03-23T00:00:00.000Z");
+  });
+
   it("creates a 6-week program with rich event coverage", () => {
     const profile = buildSleepProfile(
       {
@@ -46,8 +69,29 @@ describe("plan engine", () => {
     expect(plan.mealCutoff).toBeTruthy();
     expect(plan.sleepWindow).toBeTruthy();
     expect(
+      formatTimeInZone(
+        new Date(
+          plan.events.find((event) => event.eventType === "wake")!.startsAt,
+        ),
+        "Asia/Bangkok",
+      ),
+    ).toBe(profile.desiredWakeTime);
+    expect(
       plan.events.some((event) => event.eventRole === "daily_checkin"),
     ).toBe(true);
+    const firstCheckIn = plan.events.find((event) => event.eventRole === "daily_checkin");
+    const matchingSleepWindow = plan.events.find(
+      (event) =>
+        event.eventRole === "sleep_window" &&
+        event.nightDate === firstCheckIn?.nightDate,
+    );
+
+    expect(firstCheckIn).toBeDefined();
+    expect(matchingSleepWindow).toBeDefined();
+    expect(
+      new Date(firstCheckIn!.startsAt).getTime() -
+        new Date(matchingSleepWindow!.endsAt).getTime(),
+    ).toBe(5 * 60 * 60 * 1000);
     expect(
       plan.events.some((event) => event.eventRole === "sleep_window" && event.nightDate),
     ).toBe(true);

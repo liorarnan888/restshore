@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getSessionById } from "@/lib/session-repository";
 import { previewStructuralScenario } from "@/lib/structural-adaptation-preview";
+import { hasTestCenterAccessFromCookieHeader } from "@/lib/test-center-access";
 
 const schema = z.object({
   sessionId: z.string().min(1),
@@ -19,7 +20,10 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV === "production") {
+  if (
+    process.env.NODE_ENV === "production" &&
+    !hasTestCenterAccessFromCookieHeader(request.headers.get("cookie"))
+  ) {
     return NextResponse.json({ error: "Not available in production" }, { status: 404 });
   }
 

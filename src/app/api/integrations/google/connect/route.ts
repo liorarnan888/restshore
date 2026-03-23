@@ -87,5 +87,13 @@ export async function DELETE(request: Request) {
     body.sessionId,
     authContextFromSession(authSession),
   );
+
+  if (result.deleteResult.status !== "deleted") {
+    return NextResponse.json(result, {
+      status: 409,
+      headers: noStoreHeaders,
+    });
+  }
+
   return NextResponse.json(result, { headers: noStoreHeaders });
 }

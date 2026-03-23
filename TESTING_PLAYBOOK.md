@@ -97,20 +97,23 @@ Use this when you want a human pass before Google review or staging sign-off:
 
 1. Open the homepage and confirm the intake is reachable without sign-in.
 2. Open the privacy page and confirm it explains intake, email, Google, and Resend in plain language.
-3. Confirm `/test-center` and `/launch-insights` are hidden in production.
-4. Verify Google Cloud has:
+3. Confirm `/test-center` is password-protected in production and `/launch-insights` remains key-protected.
+4. Verify production env includes:
+   - `TEST_CENTER_PASSWORD`
+   - `AUTH_SECRET`
+5. Verify Google Cloud has:
    - the right OAuth client
    - the correct callback URI
    - the `calendar.app.created` scope path for calendar handoff
-5. Verify Resend has a verified sender you can actually send from.
-6. Run a full happy path:
+6. Verify Resend has a verified sender you can actually send from.
+7. Run a full happy path:
    - intake
    - email capture
    - Google sign-in
    - calendar creation
    - daily check-in
    - a follow-up update
-7. Confirm no-change structural cases in the Test Center now say `hold`, not `manual review`.
+8. Confirm no-change structural cases in the Test Center now say `hold`, not `manual review`.
 
 ## Common Product Checks
 
@@ -120,12 +123,29 @@ Use this when you want a human pass before Google review or staging sign-off:
 - one-question-per-screen
 - back navigation works
 - save/resume works
+- on `/start` mobile, the first question appears quickly with no duplicate orientation copy
+- on `/start` mobile, duration/helper text does not consume meaningful vertical space before the first question
+- on `/start` mobile, section labels are not duplicated above the question
+- on `/start` mobile, the top shell uses only minimal orientation and does not spend a full paragraph explaining the questionnaire
 
 ### Report
 
-- renders with key plan data
-- shows Google/account state clearly
-- exposes testing/debug affordances locally
+- renders as one coherent story, not a side-rail dashboard
+- not-connected state has one primary CTA only
+- connected state shows compact account controls only
+- `What changed and why` appears only when there is a meaningful current update
+- no beta/debug/test surfaces remain on the product-facing report
+
+#### Report Google card flow invariants
+
+These are regression-sensitive and should be checked whenever the report card, delivery state, or Google handoff copy changes:
+
+- While calendar sync is actively building, there must be no primary CTA inviting the user to add the plan again.
+- If Google has been disconnected, the UI must show a clear reconnect path and must hide remove-calendar controls.
+- Remove-calendar should only appear when an authenticated Google session can actually execute that action.
+- On mobile, the not-connected report card must keep the heading and body readable without being squeezed by side-by-side status controls.
+- The not-connected report card should still feel like one compact card, not two competing panels.
+- The connected/building states should preserve a single visual hierarchy: status first, CTA second, controls last.
 
 ### Calendar
 
@@ -133,6 +153,10 @@ Use this when you want a human pass before Google review or staging sign-off:
 - future events sync correctly
 - sleep events update after logs
 - remove calendar flow works
+- timezone is preserved end-to-end:
+  - the plan is built in the user's timezone
+  - the Google calendar resource uses the same timezone
+  - event start/end times match the plan when viewed in the user's locale
 
 ### Daily Check-In
 
@@ -140,6 +164,30 @@ Use this when you want a human pass before Google review or staging sign-off:
 - blocks future-night submit
 - allows backfill for past nights
 - updates past sleep event correctly
+
+### Public entry surfaces
+
+- homepage has one dominant CTA only
+- Google return path reads as clearly secondary
+- homepage public copy stays in behavioral-support / CBT-I-inspired language
+- homepage does not imply diagnosis, treatment, or cure
+- `/start` does not feel like a second landing page
+
+### Report card QA
+
+- not-connected state on mobile keeps the heading/body legible without horizontal crowding
+- building state shows progress/status only, not a second "add again" CTA
+- disconnected state exposes reconnect, hides remove-calendar
+- remove-calendar only appears when the current authenticated Google session can actually remove it
+- connected state keeps controls compact and subordinate to the plan summary
+
+### Test Center in production
+
+- `/test-center` should open a password gate in production, not a public dashboard.
+- unlocking should require a valid `TEST_CENTER_PASSWORD` and a signed internal session cookie.
+- after unlocking, the same QA surfaces should be available in production as in local.
+- logging out should clear the internal session and return to the gate.
+- the debug preview APIs should obey the same gate as the Test Center page.
 
 ### Adaptation
 

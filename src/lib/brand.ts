@@ -8,6 +8,7 @@ export const appSupportPromise =
 export const betaFeedbackMessage =
   "This beta is free while we learn from early users. We read every thoughtful piece of feedback.";
 export const feedbackFollowUpDelayHours = 36;
+export const helloEmail = "hello@restshore.com";
 export const supportEmail =
   process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim() || "support@restshore.com";
 export const policyEffectiveDate = "March 21, 2026";
@@ -23,8 +24,21 @@ function normalizeUrl(value: string) {
     : `https://${value}`;
 }
 
+function isLocalUrl(value: string) {
+  return value.includes("localhost") || value.includes("127.0.0.1");
+}
+
 export function appBaseUrl() {
-  const explicitUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const explicitUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const localhostUrl = `http://localhost:${process.env.PORT?.trim() || "3000"}`;
+
+  if (process.env.NODE_ENV !== "production") {
+    if (explicitUrl && isLocalUrl(explicitUrl)) {
+      return explicitUrl;
+    }
+
+    return localhostUrl;
+  }
 
   if (explicitUrl) {
     return explicitUrl;

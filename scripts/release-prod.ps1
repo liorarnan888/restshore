@@ -1,8 +1,8 @@
-$ErrorActionPreference = "Stop"
-
 param(
   [switch]$SkipChecks
 )
+
+$ErrorActionPreference = "Stop"
 
 if (-not $SkipChecks) {
   Write-Host ""

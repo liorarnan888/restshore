@@ -1,4 +1,4 @@
-import { addDays, addMinutes, format, set } from "date-fns";
+import { addHours, addMinutes, format, set } from "date-fns";
 
 import { brandName } from "@/lib/brand";
 import { deriveInsightTags } from "@/lib/questionnaire";
@@ -9,6 +9,30 @@ import type {
   SleepProfile,
   WeekSummary,
 } from "@/lib/types";
+
+type DateParts = {
+  year: number;
+  month: number;
+  day: number;
+};
+
+type TimeParts = {
+  hours: number;
+  minutes: number;
+  seconds?: number;
+  milliseconds?: number;
+};
+
+type DateTimeParts = DateParts & {
+  hours: number;
+  minutes: number;
+  seconds: number;
+  milliseconds: number;
+};
+
+const datePartsFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const dateTimePartsFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const dayLabelFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function pickPrimaryAnswer(value: AnswerMap[string], fallback: string) {
   if (Array.isArray(value)) {
@@ -110,35 +134,151 @@ function dateKeyInTimeZone(date: Date, timeZone: string) {
   }).format(date);
 }
 
-const generatedCopyFixes = [
-  ["â° ", ""],
-  ["â˜€ï¸ ", ""],
-  ["â˜• ", ""],
-  ["ðŸ“µ ", ""],
-  ["ðŸŒ™ ", ""],
-  ["ðŸ›ï¸ ", ""],
-  ["ðŸƒ ", ""],
-  ["ðŸ˜´ ", ""],
-  ["ðŸ¥£ ", ""],
-  ["ðŸ—“ï¸ ", ""],
-  ["ðŸ§  ", ""],
-  ["ðŸŒ… ", ""],
-  ["ðŸŽ¯ ", ""],
-  ["âœ… ", ""],
-  ["ðŸ“ ", ""],
-  ["ðŸ‘€ ", ""],
-  ["ðŸ§­ ", ""],
-  ["ðŸ—’ï¸ ", ""],
-] as const;
+export function datePartsInTimeZone(date: Date, timeZone: string): DateParts {
+  let formatter = datePartsFormatterCache.get(timeZone);
+
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    datePartsFormatterCache.set(timeZone, formatter);
+  }
+
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value]),
+  ) as Record<string, string>;
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+  };
+}
+
+function dateTimePartsInTimeZone(date: Date, timeZone: string): DateTimeParts {
+  let formatter = dateTimePartsFormatterCache.get(timeZone);
+
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    dateTimePartsFormatterCache.set(timeZone, formatter);
+  }
+
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value]),
+  ) as Record<string, string>;
+
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hours: Number(parts.hour),
+    minutes: Number(parts.minute),
+    seconds: Number(parts.second),
+    milliseconds: date.getUTCMilliseconds(),
+  };
+}
+
+function shiftDateParts(dateParts: DateParts, offsetDays: number): DateParts {
+  const shifted = new Date(
+    Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day + offsetDays),
+  );
+
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
+export function datePartsToUtcInstant(
+  dateParts: DateParts,
+  timeParts: TimeParts,
+  timeZone: string,
+) {
+  const targetUtc = Date.UTC(
+    dateParts.year,
+    dateParts.month - 1,
+    dateParts.day,
+    timeParts.hours,
+    timeParts.minutes,
+    timeParts.seconds ?? 0,
+    timeParts.milliseconds ?? 0,
+  );
+
+  let candidateUtc = targetUtc;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const actualParts = dateTimePartsInTimeZone(new Date(candidateUtc), timeZone);
+    const actualLocalAsUtc = Date.UTC(
+      actualParts.year,
+      actualParts.month - 1,
+      actualParts.day,
+      actualParts.hours,
+      actualParts.minutes,
+      actualParts.seconds,
+      actualParts.milliseconds,
+    );
+    const targetLocalAsUtc = Date.UTC(
+      dateParts.year,
+      dateParts.month - 1,
+      dateParts.day,
+      timeParts.hours,
+      timeParts.minutes,
+      timeParts.seconds ?? 0,
+      timeParts.milliseconds ?? 0,
+    );
+    const offset = actualLocalAsUtc - targetLocalAsUtc;
+
+    if (offset === 0) {
+      return new Date(candidateUtc);
+    }
+
+    candidateUtc -= offset;
+  }
+
+  return new Date(candidateUtc);
+}
+
+function formatDayLabelInTimeZone(date: Date, timeZone: string) {
+  let formatter = dayLabelFormatterCache.get(timeZone);
+
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    dayLabelFormatterCache.set(timeZone, formatter);
+  }
+
+  return formatter.format(date);
+}
+
+function formatDatePartsKey(dateParts: DateParts) {
+  return [
+    dateParts.year.toString().padStart(4, "0"),
+    dateParts.month.toString().padStart(2, "0"),
+    dateParts.day.toString().padStart(2, "0"),
+  ].join("-");
+}
 
 function cleanGeneratedCopy(value: string) {
   let normalized = value;
 
-  for (const [from, to] of generatedCopyFixes) {
-    normalized = normalized.replaceAll(from, to);
-  }
-
-  normalized = normalized.replace(/[^\x00-\x7F]+/g, "");
+  normalized = normalized.replace(/\uFFFD/g, "");
   normalized = normalized.replace(/ +\n/g, "\n");
   normalized = normalized.replace(/\n +/g, "\n");
 
@@ -195,7 +335,7 @@ function awarenessDescription(
   extra?: string,
 ) {
   return [
-    "👀 Awareness only\nNo task to complete right now. Just notice this and keep following the main plan.",
+    `👀 Awareness only\nNo task to complete right now. Just notice this and keep following the main plan.`,
     `🧭 What to notice\n${focus}`,
     `🧠 Why this matters\n${why}`,
     extra ? `📝 If helpful\n${extra}` : undefined,
@@ -210,7 +350,7 @@ function optionalReviewDescription(
   extra?: string,
 ) {
   return [
-    "🗒️ Optional review\nIf you have 3 to 5 minutes, use this to notice patterns. If not, just keep the plan steady.",
+    `🗒️ Optional review\nIf you have 3 to 5 minutes, use this to notice patterns. If not, just keep the plan steady.`,
     `✅ What to review\n${action}`,
     `🧠 Why this matters\n${why}`,
     extra ? `📝 Coach note\n${extra}` : undefined,
@@ -220,7 +360,8 @@ function optionalReviewDescription(
 }
 
 function buildEvent(
-  day: Date,
+  day: DateParts,
+  timeZone: string,
   weekNumber: number,
   type: ProgramEvent["eventType"],
   title: string,
@@ -228,60 +369,73 @@ function buildEvent(
   startTime: string,
   durationMinutes: number,
   idSuffix?: string,
-  metadata?: Partial<Pick<ProgramEvent, "eventRole" | "nightDate" | "actionUrl">>,
+  metadata?: Partial<Pick<ProgramEvent, "eventRole" | "nightDate" | "actionUrl">> & {
+    titleEmoji?: string;
+  },
 ): ProgramEvent {
   const { hours, minutes } = parseTimeToParts(startTime);
-  const startsAt = set(day, {
-    hours,
-    minutes,
-    seconds: 0,
-    milliseconds: 0,
-  });
+  const startsAt = datePartsToUtcInstant(
+    day,
+    {
+      hours,
+      minutes,
+      seconds: 0,
+      milliseconds: 0,
+    },
+    timeZone,
+  );
   const endsAt = addMinutes(startsAt, durationMinutes);
   const presentation = eventPresentation[type];
+  const { titleEmoji, ...eventMetadata } = metadata ?? {};
+  const emoji = titleEmoji ?? presentation.emoji;
 
   return {
-    id: `${format(day, "yyyy-MM-dd")}-${type}${idSuffix ? `-${idSuffix}` : ""}`,
-    title: cleanGeneratedCopy(`${presentation.emoji} ${title}`),
-    baseTitle: cleanGeneratedCopy(`${presentation.emoji} ${title}`),
+    id: `${formatDatePartsKey(day)}-${type}${idSuffix ? `-${idSuffix}` : ""}`,
+    title: cleanGeneratedCopy(`${emoji} ${title}`),
+    baseTitle: cleanGeneratedCopy(`${emoji} ${title}`),
     description: cleanGeneratedCopy(description),
     baseDescription: cleanGeneratedCopy(description),
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
-    dayLabel: format(day, "EEE, MMM d"),
+    dayLabel: formatDayLabelInTimeZone(startsAt, timeZone),
     weekNumber,
     calendarColorId: presentation.colorId,
     eventType: type,
-    ...metadata,
+    ...eventMetadata,
   };
 }
 
 function buildAbsoluteEvent(
   startsAt: Date,
+  timeZone: string,
   weekNumber: number,
   type: ProgramEvent["eventType"],
   title: string,
   description: string,
   durationMinutes: number,
   id: string,
-  metadata?: Partial<Pick<ProgramEvent, "eventRole" | "nightDate" | "actionUrl">>,
+  metadata?: Partial<Pick<ProgramEvent, "eventRole" | "nightDate" | "actionUrl">> & {
+    titleEmoji?: string;
+  },
 ): ProgramEvent {
   const presentation = eventPresentation[type];
   const endsAt = addMinutes(startsAt, durationMinutes);
+  const { titleEmoji, ...eventMetadata } = metadata ?? {};
+  const emoji = titleEmoji ?? presentation.emoji;
 
   return {
     id,
-    title: cleanGeneratedCopy(`${presentation.emoji} ${title}`),
-    baseTitle: cleanGeneratedCopy(`${presentation.emoji} ${title}`),
+    title: cleanGeneratedCopy(`${emoji} ${title}`),
+    baseTitle: cleanGeneratedCopy(`${emoji} ${title}`),
     description: cleanGeneratedCopy(description),
     baseDescription: cleanGeneratedCopy(description),
     startsAt: startsAt.toISOString(),
     endsAt: endsAt.toISOString(),
-    dayLabel: format(startsAt, "EEE, MMM d"),
+    dayLabel: formatDayLabelInTimeZone(startsAt, timeZone),
     weekNumber,
     calendarColorId: presentation.colorId,
     eventType: type,
-    ...metadata,
+    ...eventMetadata,
   };
 }
 
@@ -682,9 +836,10 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
   };
 
   const events: ProgramEvent[] = [];
+  const startDateParts = datePartsInTimeZone(new Date(), profile.timezone);
 
   for (let dayOffset = 0; dayOffset < 42; dayOffset += 1) {
-    const day = addDays(new Date(), dayOffset);
+    const day = shiftDateParts(startDateParts, dayOffset);
     const weekNumber = weekNumberForOffset(dayOffset);
     const wakePrompt = wakePrompts[dayOffset % wakePrompts.length];
     const lightPrompt = lightPrompts[dayOffset % lightPrompts.length];
@@ -693,12 +848,15 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     const windPractice = windDownPractices[dayOffset % windDownPractices.length];
     const bedtimePractice = bedtimePractices[dayOffset % bedtimePractices.length];
     const rescuePrompt = rescuePrompts[dayOffset % rescuePrompts.length];
-    const isWeekendSetupDay = day.getDay() === 5 || day.getDay() === 6;
-    const needsMindsetEvent =
-      day.getDay() === 1 || day.getDay() === 3 || isWeekendSetupDay;
+    const dayOfWeek = new Date(
+      Date.UTC(day.year, day.month - 1, day.day, 12, 0, 0, 0),
+    ).getUTCDay();
+    const isWeekendSetupDay = dayOfWeek === 5 || dayOfWeek === 6;
+    const needsMindsetEvent = dayOfWeek === 1 || dayOfWeek === 3 || isWeekendSetupDay;
 
     const sleepWindowEvent = buildEvent(
       day,
+      profile.timezone,
       weekNumber,
       "bed",
       STANDARD_TITLES.sleepWindow,
@@ -712,6 +870,7 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
       "sleep-window",
       {
         eventRole: "sleep_window",
+        titleEmoji: "🛌",
       },
     );
     sleepWindowEvent.plannedStartsAt = sleepWindowEvent.startsAt;
@@ -722,6 +881,7 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     );
     const inBedPracticeEvent = buildEvent(
       day,
+      profile.timezone,
       weekNumber,
       "bed",
       STANDARD_TITLES.bed,
@@ -745,9 +905,10 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
         nightDate,
       },
     );
-    const checkInStart = addMinutes(new Date(sleepWindowEvent.endsAt), 25);
+    const checkInStart = addHours(new Date(sleepWindowEvent.endsAt), 5);
     const checkInEvent = buildAbsoluteEvent(
       checkInStart,
+      profile.timezone,
       weekNumber,
       "checkin",
       STANDARD_TITLES.checkin,
@@ -762,8 +923,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
 
     events.push(
       buildEvent(
-        day,
-        weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
         "wake",
         STANDARD_TITLES.wake,
         descriptionWithWhy(
@@ -777,8 +939,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
         15,
       ),
       buildEvent(
-        day,
-        weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
         "light",
         STANDARD_TITLES.light,
         descriptionWithWhy(
@@ -792,8 +955,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
         20,
       ),
       buildEvent(
-        day,
-        weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
         "meal",
         STANDARD_TITLES.meal,
         descriptionWithWhy(
@@ -807,8 +971,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
         15,
       ),
       buildEvent(
-        day,
-        weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
         "caffeine",
         STANDARD_TITLES.caffeine,
         descriptionWithWhy(
@@ -824,8 +989,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
         15,
       ),
       buildEvent(
-        day,
-        weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
         "screen",
         STANDARD_TITLES.screen,
         descriptionWithWhy(
@@ -841,8 +1007,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
         20,
       ),
       buildEvent(
-        day,
-        weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
         "winddown",
         STANDARD_TITLES.winddown,
         descriptionWithPractice(
@@ -867,8 +1034,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     if (profile.exerciseTiming !== "rarely") {
       events.push(
         buildEvent(
-          day,
-          weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
           "exercise",
           STANDARD_TITLES.exercise,
           descriptionWithWhy(
@@ -891,8 +1059,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     if (profile.naps !== "never") {
       events.push(
         buildEvent(
-          day,
-          weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
           "nap",
           STANDARD_TITLES.nap,
           descriptionWithWhy(
@@ -909,8 +1078,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     if (needsMindsetEvent) {
       events.push(
         buildEvent(
-          day,
-          weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
           "mindset",
           STANDARD_TITLES.mindset,
           awarenessDescription(
@@ -933,8 +1103,9 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     if ((dayOffset + 1) % 7 === 0) {
       events.push(
         buildEvent(
-          day,
-          weekNumber,
+      day,
+      profile.timezone,
+      weekNumber,
           "review",
           `Week ${weekNumber} review`,
           optionalReviewDescription(
@@ -955,3 +1126,6 @@ export function buildGeneratedPlan(profile: SleepProfile): GeneratedPlan {
     events,
   };
 }
+
+
+

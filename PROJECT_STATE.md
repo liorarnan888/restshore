@@ -16,6 +16,9 @@ RestShore is a CBT-I-inspired sleep coaching web app. The current product flow i
 - Typeform-style intake with one-question-per-screen flow
 - Early email capture and resume support
 - Hosted report page
+- Report route now follows a 2-state model:
+  - not connected: high-value report plus one clear Google Calendar CTA
+  - connected: live-plan source of truth plus compact account controls
 - Google sign-in and dedicated Google Calendar creation
 - Calendar events for wake anchor, light, meal boundary, caffeine cutoff, digital sunset, wind-down, sleep window, in-bed practice, movement, nap boundary, coach notes, reviews, and daily check-ins
 - Daily sleep check-in flow for specific nights
@@ -31,6 +34,7 @@ RestShore is a CBT-I-inspired sleep coaching web app. The current product flow i
 ## Current Product Rules
 
 - The program is 6 weeks, not 14 days.
+- Public-facing acquisition copy stays in CBT-I-inspired behavioral-support language and avoids diagnosis/treatment/cure framing.
 - Calendar changes to the future are micro-adjustments only for now.
 - One bad night alone must not change future guidance.
 - Future guidance can change only when a repeated pattern is detected.
@@ -63,6 +67,7 @@ If a case is not one of these families, it should not change future guidance yet
 ## Key Local Surfaces
 
 - Home: `/`
+- Start: `/start`
 - Report: `/report/[sessionId]`
 - Daily check-in: `/check-in/[sessionId]/[nightDate]`
 - Test Center: `/test-center`
@@ -89,7 +94,9 @@ At the time this context pack was created, the working baseline passes:
 - Calendar creation UX still needs more premium progress behavior
 - Calendar event personalization is still partial
 - Report/email educational framing still needs another upgrade
+- Report page should be treated as a wow-moment surface: shorter, more persuasive, and never a dashboard
 - Reminder strategy is still unresolved
+- `/start` mobile compactness should always be treated as a regression-sensitive surface: the first question must appear quickly, without duplicated helper content, and with only the minimum top-shell orientation needed to start
 - Structural weekly adaptation is now in preview-only form, and the intended policy has been narrowed to a weekly 3-bucket model:
   - expand
   - hold

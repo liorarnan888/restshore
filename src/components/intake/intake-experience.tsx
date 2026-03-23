@@ -86,8 +86,8 @@ const TIME_DEFAULTS: Record<string, string> = {
   usual_bedtime: "23:00",
 };
 
-const TIME_MINUTE_OPTIONS = Array.from({ length: 60 }, (_, index) =>
-  String(index).padStart(2, "0"),
+const TIME_MINUTE_OPTIONS = Array.from({ length: 12 }, (_, index) =>
+  String(index * 5).padStart(2, "0"),
 );
 
 type TimeParts = {
@@ -151,7 +151,17 @@ function formatAmericanTime(value: string) {
   return `${parts.hour}:${parts.minute} ${parts.meridiem}`;
 }
 
-export function IntakeExperience() {
+function buildMinuteOptions(selectedMinute: string) {
+  if (!TIME_MINUTE_OPTIONS.includes(selectedMinute)) {
+    return [...TIME_MINUTE_OPTIONS, selectedMinute].sort(
+      (left, right) => Number(left) - Number(right),
+    );
+  }
+
+  return TIME_MINUTE_OPTIONS;
+}
+
+export function IntakeExperience({ route = "/" }: { route?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [session, setSession] = useState<IntakeSession | null>(null);
@@ -161,6 +171,7 @@ export function IntakeExperience() {
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, AnswerValue>>({});
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const saveQueueRef = useRef(Promise.resolve());
 
   useEffect(() => {
@@ -177,7 +188,7 @@ export function IntakeExperience() {
         const requestContext = {
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           visitorId: getOrCreateLaunchVisitorId(),
-          route: "/",
+          route,
           referrer: document.referrer || undefined,
         };
 
@@ -220,6 +231,7 @@ export function IntakeExperience() {
         setSession(loadedSession);
         setAnswers(loadedSession.answers);
         setDrafts({});
+        setIsFinalizing(false);
         setCurrentStepId(resolveCurrentStepId(loadedSession));
         setRequestState("idle");
       } catch {
@@ -237,7 +249,7 @@ export function IntakeExperience() {
     return () => {
       active = false;
     };
-  }, [router, searchParams]);
+  }, [route, router, searchParams]);
 
   const visibleSteps = getVisibleFlowSteps(answers);
   const currentIndex = Math.max(
@@ -252,6 +264,8 @@ export function IntakeExperience() {
   const currentSection = currentStep?.section;
   const currentSectionIndex = sections.findIndex((section) => section === currentSection);
   const answeredCount = Object.keys(answers).length;
+  const compactEntry = route === "/start";
+  const isFinalStep = currentIndex === visibleSteps.length - 1;
   const questionDraft =
     currentStep?.type === "question"
       ? drafts[currentStep.id] ??
@@ -279,7 +293,7 @@ export function IntakeExperience() {
       return;
     }
 
-    setRequestState("loading");
+    setIsFinalizing(true);
     setError(null);
 
     try {
@@ -291,7 +305,7 @@ export function IntakeExperience() {
       );
       router.push(`/report/${finalized.session.id}`);
     } catch {
-      setRequestState("error");
+      setIsFinalizing(false);
       setError("We couldn't finish the interview yet. Please try once more.");
     }
   };
@@ -318,6 +332,8 @@ export function IntakeExperience() {
     setPendingQuestionId(question.id);
     if (nextStepId) {
       setCurrentStepId(nextStepId);
+    } else {
+      setIsFinalizing(true);
     }
 
     const saveTask = async () => {
@@ -338,16 +354,22 @@ export function IntakeExperience() {
         });
 
         if (!nextStepId) {
-          const finalized = await postJson<{ session: IntakeSession }>(
-            "/api/intake/finalize",
-            {
-              sessionId: payload.session.id,
-            },
-          );
-          router.push(`/report/${finalized.session.id}`);
-          return;
+          try {
+            const finalized = await postJson<{ session: IntakeSession }>(
+              "/api/intake/finalize",
+              {
+                sessionId: payload.session.id,
+              },
+            );
+            router.push(`/report/${finalized.session.id}`);
+            return;
+          } catch {
+            setIsFinalizing(false);
+            throw new Error("Unable to finalize interview");
+          }
         }
       } catch {
+        setIsFinalizing(false);
         if (nextStepId) {
           setCurrentStepId(previousStepId);
         }
@@ -381,6 +403,34 @@ export function IntakeExperience() {
     );
   }
 
+  if (isFinalizing) {
+    return (
+      <section className="glass-panel soft-ring relative mx-auto flex min-h-[560px] w-full max-w-5xl items-center justify-center overflow-hidden rounded-[36px] border border-white/70 p-4 sm:p-5">
+        <div className="pointer-events-none absolute -right-20 top-20 h-48 w-48 rounded-full bg-[rgba(45,141,143,.12)] blur-3xl" />
+        <div className="pointer-events-none absolute -left-10 bottom-20 h-40 w-40 rounded-full bg-[rgba(245,127,91,.14)] blur-3xl" />
+
+        <div className="editorial-card relative max-w-2xl rounded-[32px] border border-white/80 px-6 py-8 text-center shadow-[0_24px_60px_rgba(31,35,64,0.10)] sm:px-8 sm:py-10">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-[linear-gradient(135deg,rgba(245,127,91,.18),rgba(246,198,103,.22))]">
+            <Sparkles className="h-7 w-7 text-[color:var(--accent-strong)]" />
+          </div>
+          <p className="mt-5 text-xs font-medium uppercase tracking-[0.2em] text-[color:var(--teal)]">
+            Building your plan
+          </p>
+          <h2 className="display mt-3 text-[2rem] leading-[1.02] text-[color:var(--foreground)] sm:text-[2.5rem]">
+            Building your report and starting plan
+          </h2>
+          <p className="mt-4 text-base leading-7 text-[color:var(--muted)]">
+            Next you&apos;ll see what seems to be shaping your sleep and the starting structure built from your answers.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-3 rounded-full border border-[rgba(45,141,143,.14)] bg-white/85 px-5 py-3 text-sm font-medium text-[color:var(--foreground)]">
+            <LoaderCircle className="h-4 w-4 animate-spin text-[color:var(--accent-strong)]" />
+            Building your plan now
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (!session || !currentStep) {
     return (
       <section className="glass-panel min-h-[720px] rounded-[36px] border border-white/70 p-8">
@@ -392,14 +442,28 @@ export function IntakeExperience() {
   }
 
   return (
-    <section className="glass-panel soft-ring relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-[36px] border border-white/70 p-4 sm:p-5">
+    <section
+      className={cn(
+        "glass-panel soft-ring relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-[36px] border border-white/70",
+        compactEntry ? "p-3 sm:p-4" : "p-4 sm:p-5",
+      )}
+    >
       <div className="pointer-events-none absolute -right-20 top-20 h-48 w-48 rounded-full bg-[rgba(45,141,143,.12)] blur-3xl" />
       <div className="pointer-events-none absolute -left-10 bottom-20 h-40 w-40 rounded-full bg-[rgba(245,127,91,.14)] blur-3xl" />
-      <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 border-b border-white/70 bg-[linear-gradient(180deg,rgba(255,250,244,.96),rgba(255,250,244,.88))] px-4 pt-4 pb-3 backdrop-blur sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5">
+      <div
+        className={cn(
+          "sticky top-0 z-10 mb-3 border-b border-white/70 bg-[linear-gradient(180deg,rgba(255,250,244,.96),rgba(255,250,244,.88))] backdrop-blur",
+          compactEntry
+            ? "-mx-3 -mt-3 px-3 pt-2.5 pb-2 sm:-mx-4 sm:-mt-4 sm:px-4 sm:pt-3"
+            : "-mx-4 -mt-4 px-4 pt-4 pb-3 sm:-mx-5 sm:-mt-5 sm:px-5 sm:pt-5",
+        )}
+      >
         <div className="flex items-center justify-between gap-4">
           <button
             className={cn(
-              "inline-flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--line)] bg-white/80 text-[color:var(--foreground)] transition hover:-translate-y-0.5",
+              compactEntry
+                ? "inline-flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--line)] bg-white/80 text-[color:var(--foreground)] transition hover:-translate-y-0.5"
+                : "inline-flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--line)] bg-white/80 text-[color:var(--foreground)] transition hover:-translate-y-0.5",
               currentIndex === 0 && "pointer-events-none opacity-35",
             )}
             type="button"
@@ -411,7 +475,9 @@ export function IntakeExperience() {
           <div className="flex-1">
             <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
               <span>
-                Step {currentIndex + 1} of {visibleSteps.length}
+                {compactEntry
+                  ? `${currentIndex + 1} / ${visibleSteps.length}`
+                  : `Step ${currentIndex + 1} of ${visibleSteps.length}`}
               </span>
               <span>{Math.round(progress)}%</span>
             </div>
@@ -423,33 +489,57 @@ export function IntakeExperience() {
             </div>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--muted)]">
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
-            About 8 to 10 minutes
-          </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
-            {answeredCount} answers saved
-          </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
-            {betaLabel}
-          </span>
-          <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
-            6-week plan ahead
-          </span>
-        </div>
+        {!compactEntry ? (
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--muted)]">
+            <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
+              About 8 to 10 minutes
+            </span>
+            <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
+              {answeredCount} answers saved
+            </span>
+            <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
+              {betaLabel}
+            </span>
+            <span className="rounded-full border border-white/80 bg-white/75 px-3 py-1.5">
+              6-week plan ahead
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      <div className="editorial-card flex flex-col gap-3 rounded-[30px] border border-white/75 p-4 sm:p-5">
-        <div className="flex flex-wrap items-center gap-2 pb-1">
+      <div
+        className={cn(
+          "editorial-card flex flex-col gap-3 rounded-[30px] border border-white/75",
+          compactEntry ? "p-3 sm:p-4" : "p-4 sm:p-5",
+        )}
+      >
+        <div
+          className={cn(
+            "pb-1",
+              compactEntry
+                ? "flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em]"
+                : "flex flex-wrap items-center gap-2",
+          )}
+        >
           {currentSection ? (
-            <div className="rounded-full border border-[rgba(45,141,143,.28)] bg-[rgba(45,141,143,.12)] px-3 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--teal)]">
-              {currentSection}
-            </div>
+            compactEntry ? (
+              <span className="text-[color:var(--teal)]">{currentSection}</span>
+            ) : (
+              <div className="rounded-full border border-[rgba(45,141,143,.28)] bg-[rgba(45,141,143,.12)] px-3 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--teal)]">
+                {currentSection}
+              </div>
+            )
           ) : null}
-          {currentSectionIndex >= 0 ? (
-            <div className="rounded-full border border-[color:var(--line)] bg-white/75 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--muted)]">
-              Part {currentSectionIndex + 1} of {sections.length}
-            </div>
+            {currentSectionIndex >= 0 ? (
+              compactEntry ? (
+                <span className="text-[color:var(--muted)]">
+                  / Part {currentSectionIndex + 1} of {sections.length}
+                </span>
+              ) : (
+              <div className="rounded-full border border-[color:var(--line)] bg-white/75 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--muted)]">
+                Part {currentSectionIndex + 1} of {sections.length}
+              </div>
+            )
           ) : null}
         </div>
 
@@ -459,6 +549,8 @@ export function IntakeExperience() {
             question={currentStep}
             draft={questionDraft}
             isSubmitting={pendingQuestionId === currentStep.id}
+            isFinalStep={isFinalStep}
+            compact={compactEntry}
             onDraftChange={(value) =>
               setDrafts((currentDrafts) => ({
                 ...currentDrafts,
@@ -473,7 +565,7 @@ export function IntakeExperience() {
           <LessonStep
             key={currentStep.id}
             lesson={currentStep}
-            loading={requestState === "loading"}
+            isFinalStep={isFinalStep}
             onContinue={() => void continueFromPassiveStep()}
           />
         ) : null}
@@ -495,29 +587,41 @@ function StepHeader({
   eyebrow,
   title,
   helper,
+  compact = false,
 }: {
   section?: string;
   eyebrow?: string;
   title: string;
   helper?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      {section ? (
+    <div className={cn("space-y-1.5", compact && "space-y-1")}>
+      {section && !compact ? (
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--accent-strong)]">
           {section}
         </p>
       ) : null}
-      {eyebrow ? (
+      {eyebrow && !compact ? (
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
           {eyebrow}
         </p>
       ) : null}
-      <h2 className="display ink-divider text-[1.65rem] leading-tight text-[color:var(--foreground)] sm:text-[2.1rem]">
+      <h2
+        className={cn(
+          "display ink-divider leading-tight text-[color:var(--foreground)]",
+          compact ? "text-[1.34rem] sm:text-[1.7rem]" : "text-[1.65rem] sm:text-[2.1rem]",
+        )}
+      >
         {title}
       </h2>
       {helper ? (
-        <p className="mt-3 max-w-3xl text-[0.95rem] leading-6 text-[color:var(--muted)]">
+        <p
+          className={cn(
+            "max-w-3xl text-[color:var(--muted)]",
+            compact ? "mt-2 text-[0.92rem] leading-6" : "mt-3 text-[0.95rem] leading-6",
+          )}
+        >
           {helper}
         </p>
       ) : null}
@@ -529,14 +633,18 @@ function QuestionStep({
   question,
   draft,
   isSubmitting,
+  isFinalStep,
   onDraftChange,
   onSubmit,
+  compact = false,
 }: {
   question: QuestionDefinition;
   draft: AnswerValue;
   isSubmitting: boolean;
+  isFinalStep: boolean;
   onDraftChange: (value: AnswerValue) => void;
   onSubmit: (question: QuestionDefinition, value: AnswerValue) => Promise<void>;
+  compact?: boolean;
 }) {
   const multiDraft = Array.isArray(draft) ? draft : [];
   const textDraft = typeof draft === "string" ? draft : "";
@@ -589,6 +697,7 @@ function QuestionStep({
         eyebrow={question.eyebrow}
         title={question.title}
         helper={question.helper}
+        compact={compact}
       />
 
       {question.inputType === "single-select" ? (
@@ -605,7 +714,9 @@ function QuestionStep({
                 key={option.value}
                 type="button"
                 className={cn(
-                  "panel-lift group flex items-start justify-between gap-4 rounded-[22px] border px-4 py-3 text-left transition",
+                  compact
+                    ? "panel-lift group flex items-start justify-between gap-3 rounded-[20px] border px-3.5 py-2.5 text-left transition"
+                    : "panel-lift group flex items-start justify-between gap-4 rounded-[22px] border px-4 py-3 text-left transition",
                   selected
                     ? "border-[color:var(--accent)] bg-[linear-gradient(135deg,rgba(245,127,91,.14),rgba(246,198,103,.16))]"
                     : "border-[color:var(--line)] bg-white hover:-translate-y-0.5 hover:border-[rgba(45,141,143,.36)] hover:bg-[rgba(45,141,143,.04)]",
@@ -613,18 +724,30 @@ function QuestionStep({
                 onClick={() => void onSubmit(question, option.value)}
               >
                 <div>
-                  <p className="text-[0.98rem] font-medium text-[color:var(--foreground)] sm:text-[1.02rem]">
+                  <p
+                    className={cn(
+                      "font-medium text-[color:var(--foreground)]",
+                      compact ? "text-[0.95rem] leading-6" : "text-[0.98rem] sm:text-[1.02rem]",
+                    )}
+                  >
                     {option.label}
                   </p>
                   {option.description ? (
-                    <p className="mt-1 text-sm leading-5 text-[color:var(--muted)]">
+                    <p
+                      className={cn(
+                        "mt-1 text-[color:var(--muted)]",
+                        compact ? "text-[0.88rem] leading-5" : "text-sm leading-5",
+                      )}
+                    >
                       {option.description}
                     </p>
                   ) : null}
                 </div>
                 <span
                   className={cn(
-                    "mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
+                    compact
+                      ? "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border"
+                      : "mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
                     selected
                       ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
                       : "border-[color:var(--line)] bg-white text-transparent group-hover:text-[color:var(--muted)]",
@@ -655,15 +778,17 @@ function QuestionStep({
             {question.options?.map((option) => {
               const selected = multiDraft.includes(option.value);
               return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={cn(
-                    "panel-lift group flex items-center justify-between gap-4 rounded-[22px] border px-4 py-3 text-left transition",
-                    selected
-                      ? "border-[color:var(--accent)] bg-[linear-gradient(135deg,rgba(245,127,91,.14),rgba(246,198,103,.16))]"
-                      : "border-[color:var(--line)] bg-white hover:border-[rgba(45,141,143,.36)] hover:bg-[rgba(45,141,143,.04)]",
-                  )}
+              <button
+                key={option.value}
+                type="button"
+                className={cn(
+                  compact
+                    ? "panel-lift group flex items-center justify-between gap-3 rounded-[20px] border px-3.5 py-2.5 text-left transition"
+                    : "panel-lift group flex items-center justify-between gap-4 rounded-[22px] border px-4 py-3 text-left transition",
+                  selected
+                    ? "border-[color:var(--accent)] bg-[linear-gradient(135deg,rgba(245,127,91,.14),rgba(246,198,103,.16))]"
+                    : "border-[color:var(--line)] bg-white hover:border-[rgba(45,141,143,.36)] hover:bg-[rgba(45,141,143,.04)]",
+                )}
                   onClick={() => {
                     const nextSelection = selected
                       ? multiDraft.filter((item) => item !== option.value)
@@ -674,12 +799,19 @@ function QuestionStep({
                     continueButtonRef.current?.focus();
                   }}
                 >
-                  <span className="text-sm font-medium text-[color:var(--foreground)] sm:text-base">
+                  <span
+                    className={cn(
+                      "font-medium text-[color:var(--foreground)]",
+                      compact ? "text-[0.95rem] leading-6" : "text-sm sm:text-base",
+                    )}
+                  >
                     {option.label}
                   </span>
                   <span
                     className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
+                      compact
+                        ? "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border"
+                        : "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
                       selected
                         ? "border-[color:var(--accent)] bg-[color:var(--accent)] text-white"
                         : "border-[color:var(--line)] bg-white text-transparent",
@@ -693,7 +825,7 @@ function QuestionStep({
           </div>
           <ActionRow
             disabled={!multiDraft.length || isSubmitting}
-            label="Continue"
+            label={isFinalStep ? "Build my plan" : "Continue"}
             loading={isSubmitting}
             buttonRef={continueButtonRef}
             type="submit"
@@ -746,7 +878,7 @@ function QuestionStep({
                   label="Minutes"
                   value={timeParts.minute}
                   onChange={(value) => updateTimeDraft({ minute: value })}
-                  options={TIME_MINUTE_OPTIONS.map((value) => ({
+                  options={buildMinuteOptions(timeParts.minute).map((value) => ({
                     value,
                     label: value,
                   }))}
@@ -785,7 +917,7 @@ function QuestionStep({
           </div>
           <ActionRow
             disabled={!resolvedTimeValue || isSubmitting}
-            label="Continue"
+            label={isFinalStep ? "Build my plan" : "Continue"}
             loading={isSubmitting}
             buttonRef={continueButtonRef}
             type="submit"
@@ -799,11 +931,11 @@ function QuestionStep({
 
 function LessonStep({
   lesson,
-  loading,
+  isFinalStep,
   onContinue,
 }: {
   lesson: MicroLessonCard;
-  loading?: boolean;
+  isFinalStep: boolean;
   onContinue: () => void;
 }) {
   return (
@@ -828,9 +960,8 @@ function LessonStep({
         </div>
       </div>
       <ActionRow
-        disabled={Boolean(loading)}
-        label="Keep going"
-        loading={loading}
+        disabled={false}
+        label={isFinalStep ? "Build my plan" : "Keep going"}
         onClick={onContinue}
       />
     </>

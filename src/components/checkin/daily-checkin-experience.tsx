@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Check, Clock3, LoaderCircle, MoonStar } from "lu
 import { BetaFeedbackCard } from "@/components/launch/beta-feedback-card";
 import {
   normalizeDailyCheckInDraft,
+  validateLoggedSleepTimes,
   type DailyCheckInDraftSnapshot,
 } from "@/lib/daily-checkin";
 import type { AdaptivePlanSummaryItem, DailySleepCheckIn } from "@/lib/types";
@@ -60,6 +61,16 @@ type SubmitPayload = {
   adaptiveSummary?: AdaptivePlanSummaryItem[];
 };
 
+const TIME_MINUTE_OPTIONS = Array.from({ length: 12 }, (_, index) =>
+  String(index * 5).padStart(2, "0"),
+);
+
+type TimeParts = {
+  hour: string;
+  minute: string;
+  meridiem: "AM" | "PM";
+};
+
 const storageKey = (sessionId: string, nightDate: string) =>
   `sleep-compass-checkin:${sessionId}:${nightDate}`;
 
@@ -84,10 +95,21 @@ function draftFromEntry(
   entry: DailySleepCheckIn | null | undefined,
   defaults: DraftDefaults,
 ): DailyCheckInDraft {
+  const shouldReuseLoggedTimes =
+    !!entry &&
+    validateLoggedSleepTimes(
+      entry.actualInBedTime,
+      entry.actualOutOfBedTime,
+      defaults.plannedBedtime,
+      defaults.plannedWakeTime,
+    ).valid;
+
   return {
     closenessToPlan: entry?.closenessToPlan ?? "",
-    actualInBedTime: entry?.actualInBedTime ?? defaults.plannedBedtime,
-    actualOutOfBedTime: entry?.actualOutOfBedTime ?? defaults.plannedWakeTime,
+    actualInBedTime:
+      shouldReuseLoggedTimes && entry ? entry.actualInBedTime : defaults.plannedBedtime,
+    actualOutOfBedTime:
+      shouldReuseLoggedTimes && entry ? entry.actualOutOfBedTime : defaults.plannedWakeTime,
     nightPattern: entry?.nightPattern ?? "",
     sleepLatencyBucket: entry?.sleepLatencyBucket,
     awakeDuringNightBucket: entry?.awakeDuringNightBucket,
@@ -249,6 +271,67 @@ function buildSteps(draft: DailyCheckInDraft): CheckInStep[] {
   return steps;
 }
 
+function toTimeParts(value: string): TimeParts | null {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const hours24 = Number(match[1]);
+  const meridiem = hours24 >= 12 ? "PM" : "AM";
+  const hour12 = hours24 % 12 || 12;
+
+  return {
+    hour: String(hour12),
+    minute: match[2],
+    meridiem,
+  };
+}
+
+function toTimeValue(parts: TimeParts) {
+  const hour12 = Number(parts.hour);
+
+  if (!Number.isInteger(hour12) || hour12 < 1 || hour12 > 12) {
+    return null;
+  }
+
+  if (!/^[0-5]\d$/.test(parts.minute)) {
+    return null;
+  }
+
+  const normalizedHours =
+    parts.meridiem === "PM"
+      ? hour12 === 12
+        ? 12
+        : hour12 + 12
+      : hour12 === 12
+        ? 0
+        : hour12;
+
+  return `${String(normalizedHours).padStart(2, "0")}:${parts.minute}`;
+}
+
+function formatAmericanTime(value: string) {
+  const parts = toTimeParts(value);
+
+  if (!parts) {
+    return value;
+  }
+
+  return `${parts.hour}:${parts.minute} ${parts.meridiem}`;
+}
+
+function buildMinuteOptions(selectedMinute: string) {
+  if (!TIME_MINUTE_OPTIONS.includes(selectedMinute)) {
+    return [...TIME_MINUTE_OPTIONS, selectedMinute].sort(
+      (left, right) => Number(left) - Number(right),
+    );
+  }
+
+  return TIME_MINUTE_OPTIONS;
+}
+
 export function DailyCheckInExperience({
   sessionId,
   nightDate,
@@ -284,6 +367,7 @@ export function DailyCheckInExperience({
   const [currentStepId, setCurrentStepId] = useState<string>("closenessToPlan");
   const [savedSleepTitle, setSavedSleepTitle] = useState<string | null>(null);
   const [adaptiveSummary, setAdaptiveSummary] = useState<AdaptivePlanSummaryItem[]>([]);
+  const [backgroundSyncStarted, setBackgroundSyncStarted] = useState(false);
 
   useEffect(() => {
     if (initialDraftDefaults || initialError) {
@@ -321,11 +405,16 @@ export function DailyCheckInExperience({
           ? (JSON.parse(storedDraft) as Partial<DailyCheckInDraft>)
           : null;
         const nextDefaults = payload.draftDefaults;
-        const nextDraft = payload.draftDefaults.existingEntry
+        const nextDraftBase = payload.draftDefaults.existingEntry
           ? draftFromEntry(payload.draftDefaults.existingEntry, nextDefaults)
+          : draftFromEntry(undefined, nextDefaults);
+        const nextDraft = payload.draftDefaults.existingEntry
+          ? nextDraftBase
           : {
-              ...draftFromEntry(undefined, nextDefaults),
-              ...parsedStoredDraft,
+              ...nextDraftBase,
+              ...(parsedStoredDraft ?? {}),
+              actualInBedTime: nextDraftBase.actualInBedTime,
+              actualOutOfBedTime: nextDraftBase.actualOutOfBedTime,
             };
 
         const normalizedDraft = normalizeDailyCheckInDraft(nextDraft);
@@ -360,10 +449,30 @@ export function DailyCheckInExperience({
       return;
     }
 
-    window.localStorage.setItem(
-      storageKey(sessionId, nightDate),
-      JSON.stringify(normalizeDailyCheckInDraft(draft)),
-    );
+    const serializedDraft = JSON.stringify(normalizeDailyCheckInDraft(draft));
+    const nextStorageKey = storageKey(sessionId, nightDate);
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    if (idleWindow.requestIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(() => {
+        window.localStorage.setItem(nextStorageKey, serializedDraft);
+      });
+
+      return () => {
+        idleWindow.cancelIdleCallback?.(handle);
+      };
+    }
+
+    const timeout = window.setTimeout(() => {
+      window.localStorage.setItem(nextStorageKey, serializedDraft);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
   }, [draft, nightDate, sessionId]);
 
   const steps = useMemo(() => (draft ? buildSteps(draft) : []), [draft]);
@@ -373,11 +482,22 @@ export function DailyCheckInExperience({
   );
   const currentStep = steps[currentIndex];
   const progress = steps.length ? ((currentIndex + 1) / steps.length) * 100 : 0;
+  const isLastStep = currentIndex === steps.length - 1;
+  const timeValidation =
+    draft && draftDefaults
+      ? validateLoggedSleepTimes(
+          draft.actualInBedTime,
+          draft.actualOutOfBedTime,
+          draftDefaults.plannedBedtime,
+          draftDefaults.plannedWakeTime,
+        )
+      : { valid: true as const };
 
   function updateDraft<K extends keyof DailyCheckInDraft>(
     key: K,
     value: DailyCheckInDraft[K],
   ) {
+    setError(null);
     setDraft((currentDraft) => (currentDraft ? { ...currentDraft, [key]: value } : currentDraft));
   }
 
@@ -390,6 +510,11 @@ export function DailyCheckInExperience({
   }
 
   function goForward() {
+    if (currentStep?.type === "time" && !timeValidation.valid) {
+      setError(timeValidation.message ?? "Please check the times before continuing.");
+      return;
+    }
+
     const nextStep = steps[currentIndex + 1];
 
     if (!nextStep) {
@@ -435,6 +560,19 @@ export function DailyCheckInExperience({
       return;
     }
 
+    const validation = validateLoggedSleepTimes(
+      nextDraft.actualInBedTime,
+      nextDraft.actualOutOfBedTime,
+      draftDefaults.plannedBedtime,
+      draftDefaults.plannedWakeTime,
+    );
+
+    if (!validation.valid) {
+      setRequestState("idle");
+      setError(validation.message ?? "Please check the sleep times before saving.");
+      return;
+    }
+
     setRequestState("saving");
     setError(null);
 
@@ -449,7 +587,22 @@ export function DailyCheckInExperience({
       window.localStorage.removeItem(storageKey(sessionId, nightDate));
       setSavedSleepTitle(payload.sleepEvent?.title ?? "Sleep");
       setAdaptiveSummary(payload.adaptiveSummary ?? []);
+      setBackgroundSyncStarted(false);
       setRequestState("saved");
+
+      void fetch("/api/check-ins/sync-calendar", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId,
+          nightDate,
+          token,
+        }),
+        keepalive: true,
+      }).catch(() => null);
+      setBackgroundSyncStarted(true);
     } catch (submitError) {
       setRequestState("error");
       setError(
@@ -500,6 +653,32 @@ export function DailyCheckInExperience({
     );
   }
 
+  if (requestState === "saving") {
+    return (
+      <section className="glass-panel mx-auto flex min-h-[560px] w-full max-w-3xl items-center justify-center rounded-[36px] border border-white/70 p-6 sm:p-8">
+        <div className="editorial-card max-w-2xl rounded-[32px] border border-white/80 px-6 py-8 text-center shadow-[0_24px_60px_rgba(31,35,64,0.10)] sm:px-8 sm:py-10">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-[linear-gradient(135deg,rgba(45,141,143,.16),rgba(246,198,103,.22))]">
+            <LoaderCircle className="h-7 w-7 animate-spin text-[color:var(--accent-strong)]" />
+          </div>
+          <p className="mt-5 text-xs font-medium uppercase tracking-[0.2em] text-[color:var(--teal)]">
+            Saving your check-in
+          </p>
+          <h1 className="display mt-3 text-[2rem] leading-[1.02] text-[color:var(--foreground)] sm:text-[2.4rem]">
+            Logging last night and updating your plan
+          </h1>
+          <p className="mt-4 text-base leading-7 text-[color:var(--muted)]">
+            We&apos;re saving your morning log, updating last night&apos;s sleep event,
+            and checking whether the next few days need a small adjustment.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-3 rounded-full border border-[rgba(45,141,143,.14)] bg-white/88 px-5 py-3 text-sm font-medium text-[color:var(--foreground)]">
+            <LoaderCircle className="h-4 w-4 animate-spin text-[color:var(--accent-strong)]" />
+            Saving now
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (requestState === "saved") {
     return (
       <section className="glass-panel mx-auto w-full max-w-3xl rounded-[36px] border border-white/70 p-6 sm:p-8">
@@ -514,6 +693,12 @@ export function DailyCheckInExperience({
             We kept the planned history intact and updated the sleep event for that night so
             your calendar now reflects what actually happened.
           </p>
+          {backgroundSyncStarted ? (
+            <p className="mt-3 text-sm leading-6 text-[color:var(--muted)]">
+              Your calendar is refreshing in the background now, so this save does not have
+              to wait on Google.
+            </p>
+          ) : null}
           <div className="mt-5 rounded-[24px] border border-white/80 bg-white/85 p-5">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--teal)]">
               Updated sleep event
@@ -627,28 +812,30 @@ export function DailyCheckInExperience({
 
         {currentStep.type === "time" ? (
           <>
-            <label className="panel-lift mt-3 block rounded-[22px] border border-[color:var(--line)] bg-white p-4">
-              <span className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[color:var(--muted)]">
-                <Clock3 className="h-4 w-4" />
-                Pick a time
-              </span>
-              <input
-                className="w-full bg-transparent text-3xl font-medium text-[color:var(--foreground)] outline-none"
-                type="time"
-                value={draft[currentStep.id as keyof DailyCheckInDraft] as string}
-                onChange={(event) =>
-                  updateDraft(
-                    currentStep.id as keyof DailyCheckInDraft,
-                    event.target.value as never,
-                  )
-                }
-              />
-            </label>
+            <TimeStepCard
+              stepId={currentStep.id}
+              draftDefaults={draftDefaults}
+              value={draft[currentStep.id as keyof DailyCheckInDraft] as string}
+              onChange={(value) =>
+                updateDraft(
+                  currentStep.id as keyof DailyCheckInDraft,
+                  value as never,
+                )
+              }
+            />
             <ActionRow
-              disabled={!draft[currentStep.id as keyof DailyCheckInDraft] || requestState === "saving"}
-              label="Continue"
-              loading={requestState === "saving"}
-              onClick={goForward}
+              disabled={
+                !draft[currentStep.id as keyof DailyCheckInDraft] || !timeValidation.valid
+              }
+              label={isLastStep ? "Save morning log" : "Continue"}
+              onClick={() => {
+                if (isLastStep) {
+                  void handleSubmit();
+                  return;
+                }
+
+                goForward();
+              }}
             />
           </>
         ) : (
@@ -699,6 +886,10 @@ export function DailyCheckInExperience({
         <p className="mt-3 rounded-2xl border border-[rgba(235,93,52,.18)] bg-[rgba(245,127,91,.12)] px-4 py-3 text-sm text-[color:var(--foreground)]">
           {error}
         </p>
+      ) : currentStep.type === "time" && !timeValidation.valid ? (
+        <p className="mt-3 rounded-2xl border border-[rgba(235,93,52,.18)] bg-[rgba(245,127,91,.12)] px-4 py-3 text-sm text-[color:var(--foreground)]">
+          {timeValidation.message}
+        </p>
       ) : null}
 
       <div className="mt-3 hidden items-center justify-between gap-3 text-sm text-[color:var(--muted)] sm:flex">
@@ -708,6 +899,142 @@ export function DailyCheckInExperience({
         <span>{draftDefaults.existingEntry ? "Editing this sleep log" : "New sleep log"}</span>
       </div>
     </section>
+  );
+}
+
+function TimeStepCard({
+  stepId,
+  draftDefaults,
+  value,
+  onChange,
+}: {
+  stepId: CheckInStep["id"];
+  draftDefaults: DraftDefaults;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const fallbackValue =
+    stepId === "actualInBedTime"
+      ? draftDefaults.plannedBedtime
+      : draftDefaults.plannedWakeTime;
+  const resolvedTimeValue = value || fallbackValue;
+  const timeParts = toTimeParts(resolvedTimeValue) ?? toTimeParts(fallbackValue);
+
+  const updateTimeDraft = (nextParts: Partial<TimeParts>) => {
+    if (!timeParts) {
+      return;
+    }
+
+    const nextValue = toTimeValue({
+      ...timeParts,
+      ...nextParts,
+    });
+
+    if (!nextValue) {
+      return;
+    }
+
+    onChange(nextValue);
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="panel-lift rounded-[30px] border border-[color:var(--line)] bg-[linear-gradient(145deg,rgba(255,250,244,.96),rgba(255,255,255,.9))] p-5 sm:p-6">
+        <div className="rounded-[24px] bg-[rgba(45,141,143,.08)] p-4">
+          <span className="flex items-center gap-2 text-sm uppercase tracking-[0.16em] text-[color:var(--teal)]">
+            <Clock3 className="h-4 w-4" />
+            Pick a time
+          </span>
+          <p className="mt-3 display text-3xl text-[color:var(--foreground)] sm:text-4xl">
+            {formatAmericanTime(resolvedTimeValue)}
+          </p>
+        </div>
+
+        {timeParts ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <TimeSelect
+              label="Hour"
+              value={timeParts.hour}
+              onChange={(nextValue) => updateTimeDraft({ hour: nextValue })}
+              options={Array.from({ length: 12 }, (_, index) => {
+                const optionValue = String(index + 1);
+
+                return {
+                  value: optionValue,
+                  label: optionValue,
+                };
+              })}
+            />
+            <TimeSelect
+              label="Minutes"
+              value={timeParts.minute}
+              onChange={(nextValue) => updateTimeDraft({ minute: nextValue })}
+              options={buildMinuteOptions(timeParts.minute).map((optionValue) => ({
+                value: optionValue,
+                label: optionValue,
+              }))}
+            />
+            <div className="rounded-[24px] border border-[color:var(--line)] bg-white/90 p-3">
+              <span className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted)]">
+                AM / PM
+              </span>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {(["AM", "PM"] as const).map((meridiem) => {
+                  const selected = timeParts.meridiem === meridiem;
+
+                  return (
+                    <button
+                      key={meridiem}
+                      type="button"
+                      className={cn(
+                        "rounded-[18px] px-4 py-3 text-sm font-semibold transition",
+                        selected
+                          ? "bg-[linear-gradient(90deg,var(--accent-strong),var(--accent))] text-white shadow-[0_12px_24px_rgba(235,93,52,.2)]"
+                          : "border border-[color:var(--line)] bg-white text-[color:var(--foreground)] hover:border-[rgba(45,141,143,.36)]",
+                      )}
+                      onClick={() => updateTimeDraft({ meridiem })}
+                    >
+                      {meridiem}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function TimeSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="rounded-[24px] border border-[color:var(--line)] bg-white/90 p-3">
+      <span className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted)]">
+        {label}
+      </span>
+      <select
+        className="mt-3 w-full rounded-[18px] border border-[color:var(--line)] bg-[rgba(255,250,244,.95)] px-4 py-3 text-2xl font-semibold text-[color:var(--foreground)] outline-none transition focus:border-[rgba(45,141,143,.36)]"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

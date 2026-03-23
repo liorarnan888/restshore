@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 import { format } from "date-fns";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
@@ -8,6 +8,11 @@ import { StructuralReviewPreviewCard } from "@/components/report/structural-revi
 import { brandName } from "@/lib/brand";
 import { listSessions } from "@/lib/session-repository";
 import { getSession } from "@/lib/session-service";
+import {
+  isTestCenterAuthConfigured,
+  TEST_CENTER_ACCESS_COOKIE_NAME,
+  verifyTestCenterAccessToken,
+} from "@/lib/test-center-access";
 
 export const dynamic = "force-dynamic";
 
@@ -41,16 +46,127 @@ function findNextCheckInLink(
   );
 }
 
+function accessErrorMessage(error?: string) {
+  switch (error) {
+    case "invalid":
+      return "That password did not work. Please try again.";
+    case "unavailable":
+      return "Test Center access is not configured on this deployment yet.";
+    default:
+      return null;
+  }
+}
+
+function TestCenterAccessGate({
+  redirectTo,
+  error,
+}: {
+  redirectTo: string;
+  error?: string;
+}) {
+  const message = accessErrorMessage(error);
+  const configured = isTestCenterAuthConfigured();
+
+  return (
+    <main className="relative overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center gap-4">
+        <header className="flex items-center gap-3 rounded-full border border-white/60 bg-white/55 px-4 py-3 text-sm text-[color:var(--muted)] shadow-[0_18px_40px_rgba(31,35,64,0.08)] backdrop-blur md:px-5">
+          <BrandLogo variant="mark" className="h-10 w-10 shrink-0" priority />
+          <div>
+            <p className="display text-lg text-[color:var(--foreground)]">
+              {brandName} Test Center
+            </p>
+            <p className="text-xs">Production QA hub with password-only access</p>
+          </div>
+        </header>
+
+        <section className="glass-panel rounded-[32px] border border-white/75 p-6 sm:p-8">
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--teal)]">
+            Internal access
+          </p>
+          <h1 className="display mt-3 text-4xl leading-tight text-[color:var(--foreground)]">
+            Enter the Test Center password to continue.
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--muted)]">
+            This production surface is reserved for QA, review, and scenario
+            simulation. The public product stays on the normal user paths.
+          </p>
+
+          {message ? (
+            <p className="mt-5 rounded-[20px] border border-[rgba(235,93,52,.2)] bg-[rgba(235,93,52,.08)] px-4 py-3 text-sm leading-6 text-[color:var(--foreground)]">
+              {message}
+            </p>
+          ) : null}
+
+          {!configured ? (
+            <p className="mt-5 rounded-[20px] border border-[color:var(--line)] bg-white/90 px-4 py-4 text-sm leading-6 text-[color:var(--muted)]">
+              Set <code>TEST_CENTER_PASSWORD</code> and <code>AUTH_SECRET</code> on
+              this deployment to unlock the production Test Center.
+            </p>
+          ) : (
+            <form
+              action="/api/test-center/login"
+              method="post"
+              className="mt-6 grid gap-4 sm:max-w-xl"
+            >
+              <input type="hidden" name="redirectTo" value={redirectTo} />
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-[color:var(--foreground)]">
+                  Password
+                </span>
+                <input
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter internal password"
+                  className="rounded-[18px] border border-[color:var(--line)] bg-white/95 px-4 py-3 text-base text-[color:var(--foreground)] outline-none transition placeholder:text-[color:var(--muted)] focus:border-[color:var(--accent)]"
+                />
+              </label>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-full bg-[linear-gradient(90deg,var(--accent-strong),var(--accent))] px-5 py-3 font-medium text-white shadow-[0_18px_32px_rgba(235,93,52,.24)] transition hover:-translate-y-0.5"
+                >
+                  Unlock Test Center
+                </button>
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-white px-5 py-3 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
+                >
+                  Back home
+                </Link>
+              </div>
+              <p className="text-sm leading-6 text-[color:var(--muted)]">
+                Once unlocked, the page will show sessions, daily diary previews,
+                adaptation labs, and review tools in one place.
+              </p>
+            </form>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
 export default async function TestCenterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ session?: string }>;
+  searchParams: Promise<{ session?: string; error?: string }>;
 }) {
-  if (process.env.NODE_ENV === "production") {
-    notFound();
+  const { session: selectedSessionId, error } = await searchParams;
+  const isProduction = process.env.NODE_ENV === "production";
+  const cookieStore = isProduction ? await cookies() : null;
+  const accessToken = cookieStore?.get(TEST_CENTER_ACCESS_COOKIE_NAME)?.value;
+  const hasAccess = !isProduction || verifyTestCenterAccessToken(accessToken);
+
+  if (!hasAccess) {
+    const redirectTo = selectedSessionId
+      ? `/test-center?session=${encodeURIComponent(selectedSessionId)}`
+      : "/test-center";
+
+    return <TestCenterAccessGate redirectTo={redirectTo} error={error} />;
   }
 
-  const { session: selectedSessionId } = await searchParams;
   const allSessions = (await listSessions()).sort((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
   );
@@ -72,12 +188,24 @@ export default async function TestCenterPage({
                 {brandName} Test Center
               </p>
               <p className="text-xs">
-                Local-only QA hub for sessions, diary, adaptation, and future flows
+                Production QA hub for sessions, diary, adaptation, and future flows
               </p>
             </div>
           </div>
-          <div className="hidden rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 md:block">
-            Human-friendly testing, not raw ids and guesswork
+          <div className="flex items-center gap-3">
+            <div className="hidden rounded-full border border-[color:var(--line)] bg-white/70 px-4 py-2 md:block">
+              Human-friendly testing, not raw ids and guesswork
+            </div>
+            {isProduction ? (
+              <form action="/api/test-center/logout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 font-medium text-[color:var(--foreground)] transition hover:-translate-y-0.5"
+                >
+                  Log out
+                </button>
+              </form>
+            ) : null}
           </div>
         </header>
 

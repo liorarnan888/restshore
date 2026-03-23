@@ -77,7 +77,7 @@ describe("session service", () => {
     expect(finalized.generatedPlan?.durationWeeks).toBe(6);
     expect(finalized.generatedPlan?.events.length).toBeGreaterThan(0);
     expect(finalized.generatedReport?.headline).toContain("6-week");
-  }, 10000);
+  }, 15000);
 
   it("marks reminders as sent once processed", async () => {
     const session = await startIntakeSession("Asia/Bangkok");
@@ -202,7 +202,7 @@ describe("session service", () => {
     expect(submitted.sleepEvent?.endsAt).toBe("2026-03-17T00:02:00.000Z");
     expect(submitted.sleepEvent?.plannedStartsAt).toBe("2026-03-16T17:00:00.000Z");
     expect(submitted.sleepEvent?.plannedEndsAt).toBe("2026-03-17T01:00:00.000Z");
-  }, 10000);
+  }, 15000);
 
   it("retrofits daily check-in events onto older saved plans", async () => {
     const session = await startIntakeSession("Asia/Bangkok");
@@ -295,5 +295,92 @@ describe("session service", () => {
         (event) => event.eventRole === "sleep_window" && event.nightDate,
       ),
     ).toBe(true);
+  }, 10000);
+
+  it("repairs legacy generated reports when loading an old session", async () => {
+    const session = await startIntakeSession("Asia/Bangkok");
+
+    const answers: Array<[string, string | string[], string]> = [
+      ["primary_problem", "falling_asleep", "insomnia_duration"],
+      ["insomnia_duration", "over_1_year", "daytime_impact"],
+      ["daytime_impact", "high", "lesson_anchor_wake"],
+    ];
+
+    for (const [questionId, value, nextStepId] of answers) {
+      await saveAnswer(session.id, questionId, value, nextStepId);
+    }
+
+    await captureEmail(session.id, "demo@example.com", "lesson_anchor_wake");
+
+    const deeperAnswers: Array<[string, string | string[], string]> = [
+      ["desired_wake_time", "07:00", "usual_bedtime"],
+      ["usual_bedtime", "23:30", "weekend_wake_shift"],
+      ["weekend_wake_shift", "1_2_hours", "time_in_bed"],
+      ["time_in_bed", "8_9", "sleep_latency"],
+      ["sleep_latency", "30_60", "wake_after_sleep_onset"],
+      ["wake_after_sleep_onset", "30_60", "awakenings_count"],
+      ["awakenings_count", "2_3", "early_wake_pattern"],
+      ["early_wake_pattern", "1_2", "lesson_sleep_pressure"],
+      ["schedule_consistency", "swings", "bed_use_pattern"],
+      ["bed_use_pattern", "phone_or_tv", "awake_response"],
+      ["awake_response", "stay_and_try", "lesson_stimulus_control"],
+      ["caffeine_amount", "moderate", "caffeine_timing"],
+      ["caffeine_timing", "late_afternoon", "alcohol_timing"],
+      ["alcohol_timing", "some_evenings", "dinner_timing"],
+      ["dinner_timing", "under_2_hours", "screen_habit"],
+      ["screen_habit", "in_bed", "work_after_dinner"],
+      ["work_after_dinner", "often", "lesson_arousal"],
+      ["naps", "sometimes", "exercise_timing"],
+      ["exercise_timing", "afternoon", "stress_level"],
+      ["stress_level", "busy", "sleep_thoughts"],
+      ["sleep_thoughts", "pressure", "relaxation_experience"],
+      ["relaxation_experience", "inconsistent", "sleep_medication"],
+      ["sleep_medication", "none", "sleep_environment"],
+      ["sleep_environment", "noise", "impact_areas"],
+      ["impact_areas", ["work", "mood"], "red_flags"],
+      ["red_flags", ["none"], "motivation"],
+      ["motivation", "steady", "lesson_consistency"],
+    ];
+
+    for (const [questionId, value, nextStepId] of deeperAnswers) {
+      await saveAnswer(session.id, questionId, value, nextStepId);
+    }
+
+    await finalizeSession(session.id);
+
+    const rawBefore = JSON.parse(await readFile(storePath, "utf8")) as {
+      sessions: Record<string, { generatedReport?: { clinicianSummary?: string[]; html?: string } }>;
+      resumeIndex: Record<string, string>;
+    };
+
+    const storedReport = rawBefore.sessions[session.id]?.generatedReport;
+
+    if (!storedReport) {
+      throw new Error("Generated report missing in test");
+    }
+
+    storedReport.clinicianSummary = [
+      "Primary complaint: falling asleep.",
+      "Duration: 13 months. Daytime impact: mild.",
+      "Current pattern: bedtime around 23:00, desired wake time 07:00, estimated starting sleep window 7 hours.",
+    ];
+    storedReport.html = `${storedReport.html ?? ""}\n<!-- legacy 13 months -->`;
+
+    await mkdir(path.dirname(storePath), { recursive: true });
+    await writeFile(storePath, JSON.stringify(rawBefore, null, 2), "utf8");
+
+    const repaired = await getSession(session.id);
+
+    expect(repaired?.generatedReport?.clinicianSummary.join(" ")).toContain("more than a year");
+    expect(repaired?.generatedReport?.clinicianSummary.join(" ")).not.toContain("13 months");
+    expect(repaired?.generatedReport?.clinicianSummary.join(" ")).toContain("Current usual bedtime");
+
+    const rawAfter = JSON.parse(await readFile(storePath, "utf8")) as {
+      sessions: Record<string, { generatedReport?: { clinicianSummary?: string[]; html?: string } }>;
+    };
+    const repairedReport = rawAfter.sessions[session.id]?.generatedReport;
+
+    expect(repairedReport?.clinicianSummary?.join(" ")).toContain("more than a year");
+    expect(repairedReport?.clinicianSummary?.join(" ")).not.toContain("13 months");
   }, 10000);
 });

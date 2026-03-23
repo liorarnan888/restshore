@@ -223,6 +223,29 @@ export type WeekSummary = {
   goals: string[];
 };
 
+export type ReportPlanWeekArcItem = {
+  weekNumber: number;
+  title: string;
+  focus: string;
+};
+
+export type ReportPlanChangeSummary = {
+  title: string;
+  why: string;
+  effectiveDate: string;
+  deltaMinutes?: number;
+};
+
+export type ReportPlanView = {
+  currentPlan: {
+    wakeTime: string;
+    bedtimeTarget: string;
+    sleepWindow: string;
+    weekArc: ReportPlanWeekArcItem[];
+  };
+  changeSummary: ReportPlanChangeSummary[];
+};
+
 export type GeneratedPlan = {
   timezone: string;
   durationWeeks: number;
@@ -241,6 +264,7 @@ export type GeneratedPlan = {
   weekSummaries: WeekSummary[];
   events: ProgramEvent[];
   insightTags: string[];
+  reportView?: ReportPlanView;
 };
 
 export type SleepProfile = {

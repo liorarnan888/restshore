@@ -268,7 +268,7 @@ async function clearCalendarEvents(
   });
 }
 
-function buildCalendarRequestBody(event: ProgramEvent, timeZone: string) {
+export function buildCalendarRequestBody(event: ProgramEvent, timeZone: string) {
   return {
     summary: event.title,
     description: event.description,
@@ -653,25 +653,47 @@ export async function deleteCalendarProgram(
   }
 
   try {
-    await calendar.calendars.delete({
-      calendarId: session.calendarExternalId,
-    });
+    await withGoogleRetry(() =>
+      calendar.calendars.delete({
+        calendarId: session.calendarExternalId!,
+      }),
+    );
 
     return {
       status: "deleted",
     };
   } catch (error) {
+    const status = getGoogleErrorStatus(error);
+
+    if (status === 404 || status === 410) {
+      return {
+        status: "deleted",
+      };
+    }
+
+    try {
+      await withGoogleRetry(() =>
+        calendar.calendarList.delete({
+          calendarId: session.calendarExternalId!,
+        }),
+      );
+
+      return {
+        status: "deleted",
+      };
+    } catch (fallbackError) {
     console.error("Google calendar delete failed", {
       sessionId: session.id,
       calendarId: session.calendarExternalId,
       email: authContext?.email ?? session.email,
-      message: error instanceof Error ? error.message : String(error),
+      message: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      primaryMessage: error instanceof Error ? error.message : String(error),
       details:
-        typeof error === "object" &&
-        error !== null &&
-        "response" in error &&
-        typeof (error as { response?: { data?: unknown } }).response === "object"
-          ? (error as { response?: { data?: unknown } }).response?.data
+        typeof fallbackError === "object" &&
+        fallbackError !== null &&
+        "response" in fallbackError &&
+        typeof (fallbackError as { response?: { data?: unknown } }).response === "object"
+          ? (fallbackError as { response?: { data?: unknown } }).response?.data
           : undefined,
     });
 
@@ -679,5 +701,6 @@ export async function deleteCalendarProgram(
       status: "failed",
       calendarId: session.calendarExternalId,
     };
+    }
   }
 }

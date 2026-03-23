@@ -2,8 +2,41 @@ import { appSupportPromise, brandName } from "@/lib/brand";
 import type { GeneratedPlan, GeneratedReport, ReportSection, SleepProfile } from "@/lib/types";
 import { titleCase } from "@/lib/utils";
 
-function formatProblem(value: string) {
-  return titleCase(value.replaceAll("_", " ")).toLowerCase();
+const primaryProblemLabels: Record<string, string> = {
+  falling_asleep: "falling asleep",
+  night_wakings: "night wakings",
+  early_waking: "early waking",
+  irregular_schedule: "irregular schedule",
+};
+
+const insomniaDurationLabels: Record<string, string> = {
+  under_1_month: "less than a month",
+  "1_3_months": "about 1 to 3 months",
+  "3_12_months": "several months",
+  over_1_year: "more than a year",
+};
+
+const daytimeImpactLabels: Record<string, string> = {
+  mild: "mild",
+  moderate: "moderate",
+  high: "high",
+  severe: "severe",
+};
+
+function formatLabel(value: string, labels: Record<string, string>) {
+  return labels[value] ?? titleCase(value.replaceAll("_", " ")).toLowerCase();
+}
+
+function formatPrimaryProblem(value: string) {
+  return formatLabel(value, primaryProblemLabels);
+}
+
+function formatInsomniaDuration(value: string) {
+  return formatLabel(value, insomniaDurationLabels);
+}
+
+function formatDaytimeImpact(value: string) {
+  return formatLabel(value, daytimeImpactLabels);
 }
 
 function formatList(items: string[]) {
@@ -13,7 +46,7 @@ function formatList(items: string[]) {
 function buildKeyInsights(profile: SleepProfile, plan: GeneratedPlan) {
   const insights = [
     `This program anchors around a ${plan.wakeTime} wake time for the next ${plan.durationWeeks} weeks.`,
-    `Your starting sleep window is about ${plan.sleepWindow}, with a bedtime target of ${plan.bedtimeTarget}.`,
+    `Your starting sleep window is about ${plan.sleepWindow}. With your wake anchor at ${plan.wakeTime}, that gives an initial bedtime target of ${plan.bedtimeTarget}.`,
     `Your evening boundaries begin with a kitchen slowdown by ${plan.mealCutoff}, caffeine cutoff by ${plan.caffeineCutoff}, and screens down by ${plan.screenCutoff}.`,
   ];
 
@@ -44,9 +77,10 @@ function buildClinicianSummary(profile: SleepProfile, plan: GeneratedPlan) {
     : "not clearly specified";
 
   return [
-    `Primary complaint: ${formatProblem(profile.primaryProblem)}.`,
-    `Duration: ${formatProblem(profile.insomniaDuration)}. Daytime impact: ${formatProblem(profile.daytimeImpact)}.`,
-    `Current pattern: bedtime around ${profile.usualBedtime}, desired wake time ${plan.wakeTime}, estimated starting sleep window ${plan.sleepWindow}.`,
+    `Primary complaint: ${formatPrimaryProblem(profile.primaryProblem)}.`,
+    `Duration: ${formatInsomniaDuration(profile.insomniaDuration)}. Daytime impact: ${formatDaytimeImpact(profile.daytimeImpact)}.`,
+    `Current usual bedtime: ${profile.usualBedtime}.`,
+    `Starting plan: wake anchor ${plan.wakeTime}, initial bedtime target ${plan.bedtimeTarget}, starting sleep window ${plan.sleepWindow}.`,
     `Main behavioral contributors flagged: ${profile.insightTags.length ? formatList(profile.insightTags).join(", ") : "none strongly flagged"}.`,
     `Functional impact areas: ${impactText}.`,
   ];
@@ -97,16 +131,17 @@ function buildSections(profile: SleepProfile, plan: GeneratedPlan): ReportSectio
   return [
     {
       title: "Sleep snapshot",
-      body: `Your answers suggest a sleep pattern most shaped by ${formatProblem(
+      body: `Your answers suggest a sleep pattern most shaped by ${formatPrimaryProblem(
         profile.primaryProblem,
-      )}. The problem has been present for ${formatProblem(
+      )}. The problem has been present for ${formatInsomniaDuration(
         profile.insomniaDuration,
-      )} and is currently causing ${formatProblem(
+      )} and is currently causing ${formatDaytimeImpact(
         profile.daytimeImpact,
       )} daytime impairment.`,
       bullets: [
-        `Preferred wake time anchor: ${plan.wakeTime}`,
-        `Current usual bedtime: ${plan.bedtimeTarget} target from a starting sleep window of ${plan.sleepWindow}`,
+        `Current usual bedtime: ${profile.usualBedtime}`,
+        `Wake anchor: ${plan.wakeTime}`,
+        `Initial bedtime target: ${plan.bedtimeTarget} from a ${plan.sleepWindow} starting sleep window`,
         `Weekend guardrail: ${plan.weekendGuardrail}`,
       ],
     },
@@ -151,7 +186,7 @@ function buildSections(profile: SleepProfile, plan: GeneratedPlan): ReportSectio
       title: "If you decide to get outside help",
       body: "If you still need help after following the plan, this summary gives a clearer picture than simply saying 'I do not sleep well.' It captures timing, awake time, behavioral contributors, and safety flags in a format that is easier to share with a sleep-focused clinician.",
       bullets: [
-        `Main complaint: ${formatProblem(profile.primaryProblem)}`,
+        `Main complaint: ${formatPrimaryProblem(profile.primaryProblem)}`,
         `Sleep window target: ${plan.sleepWindow}`,
         `Behavioral targets: ${profile.insightTags.length ? formatList(profile.insightTags).join(", ") : "general stabilization"}`,
         `Functional impact: ${impactAreas.length ? formatList(impactAreas).join(", ") : "not strongly endorsed"}`,
@@ -281,7 +316,7 @@ export function buildGeneratedReport(
   return {
     headline: "Your 6-week sleep plan",
     summary:
-      "A calm sleep summary with a six-week behavioral plan, calendar-guided coaching, and timing, habit, and arousal recommendations tailored to your answers.",
+      "A calm sleep summary with a six-week behavioral plan, calendar-guided coaching, and a clinician-friendly snapshot that separates your current pattern from the derived starting plan.",
     keyInsights,
     sections,
     safetyNote,
