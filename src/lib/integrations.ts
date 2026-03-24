@@ -596,13 +596,29 @@ export async function syncCalendarEventUpdates(
           throw error;
         }
 
-        await withGoogleRetry(() =>
-          calendar.events.update({
-            calendarId: session.calendarExternalId!,
-            eventId,
-            requestBody,
-          }),
-        );
+        try {
+          await withGoogleRetry(() =>
+            calendar.events.update({
+              calendarId: session.calendarExternalId!,
+              eventId,
+              requestBody,
+            }),
+          );
+        } catch (updateError) {
+          const updateStatus = getGoogleErrorStatus(updateError);
+
+          if (updateStatus === 404) {
+            console.warn("Skipping stale Google event update after conflict", {
+              sessionId: session.id,
+              calendarId: session.calendarExternalId,
+              eventId,
+              programEventId: event.id,
+            });
+            return;
+          }
+
+          throw updateError;
+        }
       }
     });
 

@@ -203,3 +203,100 @@ export async function listFeedbackEntries(limit = 100) {
     createdAt: entry.createdAt.toISOString(),
   }));
 }
+
+export async function deleteLaunchDataForSessions({
+  sessionIds,
+  email,
+}: {
+  sessionIds: string[];
+  email?: string;
+}) {
+  if (!sessionIds.length && !email) {
+    return {
+      analyticsDeleted: 0,
+      feedbackDeleted: 0,
+    };
+  }
+
+  if (!prisma) {
+    const store = await readLaunchStore();
+    const sessionIdSet = new Set(sessionIds);
+    const normalizedEmail = email?.trim().toLowerCase();
+    const nextAnalytics = store.analytics.filter(
+      (entry) => !entry.sessionId || !sessionIdSet.has(entry.sessionId),
+    );
+    const nextFeedback = store.feedback.filter((entry) => {
+      if (entry.sessionId && sessionIdSet.has(entry.sessionId)) {
+        return false;
+      }
+
+      if (
+        normalizedEmail &&
+        entry.email?.trim().toLowerCase() === normalizedEmail
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const analyticsDeleted = store.analytics.length - nextAnalytics.length;
+    const feedbackDeleted = store.feedback.length - nextFeedback.length;
+
+    await writeLaunchStore({
+      analytics: nextAnalytics,
+      feedback: nextFeedback,
+    });
+
+    return {
+      analyticsDeleted,
+      feedbackDeleted,
+    };
+  }
+
+  const normalizedEmail = email?.trim().toLowerCase();
+  const analyticsDelete = sessionIds.length
+    ? prisma.analyticsEvent.deleteMany({
+        where: {
+          sessionId: {
+            in: sessionIds,
+          },
+        },
+      })
+    : Promise.resolve({ count: 0 });
+  const feedbackDelete = prisma.feedbackEntry.deleteMany({
+    where: {
+      OR: [
+        ...(sessionIds.length
+          ? [
+              {
+                sessionId: {
+                  in: sessionIds,
+                },
+              },
+            ]
+          : []),
+        ...(normalizedEmail
+          ? [
+              {
+                email: {
+                  equals: normalizedEmail,
+                  mode: "insensitive" as const,
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+  });
+
+  const [analyticsResult, feedbackResult] = await Promise.all([
+    analyticsDelete,
+    feedbackDelete,
+  ]);
+
+  return {
+    analyticsDeleted: analyticsResult.count,
+    feedbackDeleted: feedbackResult.count,
+  };
+}

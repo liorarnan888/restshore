@@ -3,11 +3,17 @@ import path from "node:path";
 
 import { buildDailyCheckInToken } from "@/lib/daily-checkin";
 import {
+  createFeedbackEntry,
+  listAnalyticsEvents,
+  listFeedbackEntries,
+} from "@/lib/launch-data";
+import {
   captureEmail,
   finalizeSession,
   getDailyCheckIn,
   getSession,
   processResumeReminders,
+  resetUserData,
   resumeIntakeSession,
   saveAnswer,
   startIntakeSession,
@@ -15,10 +21,12 @@ import {
 } from "@/lib/session-service";
 
 const storePath = path.join(process.cwd(), "data", "sessions.json");
+const launchStorePath = path.join(process.cwd(), "data", "launch.json");
 
 describe("session service", () => {
   beforeEach(async () => {
     await rm(storePath, { force: true });
+    await rm(launchStorePath, { force: true });
   });
 
   it("starts, saves, resumes, and finalizes a deeper session", async () => {
@@ -383,4 +391,50 @@ describe("session service", () => {
     expect(repairedReport?.clinicianSummary?.join(" ")).toContain("more than a year");
     expect(repairedReport?.clinicianSummary?.join(" ")).not.toContain("13 months");
   }, 10000);
+
+  it("resets every saved session and launch artifact for the connected email", async () => {
+    const firstSession = await startIntakeSession("Asia/Bangkok");
+    await captureEmail(firstSession.id, "demo@example.com", "lesson_anchor_wake");
+
+    const secondSession = await startIntakeSession("Asia/Bangkok");
+    await captureEmail(secondSession.id, "demo@example.com", "lesson_anchor_wake");
+
+    await createFeedbackEntry({
+      source: "report",
+      rating: 4,
+      message: "Need a clean slate.",
+      sessionId: firstSession.id,
+      email: "demo@example.com",
+    });
+
+    await createFeedbackEntry({
+      source: "email_follow_up",
+      rating: 5,
+      message: "Another note.",
+      sessionId: secondSession.id,
+      email: "demo@example.com",
+    });
+
+    const analyticsBefore = await listAnalyticsEvents();
+    const feedbackBefore = await listFeedbackEntries();
+
+    expect(analyticsBefore).toHaveLength(4);
+    expect(feedbackBefore).toHaveLength(2);
+
+    const result = await resetUserData(firstSession.id, {
+      email: "demo@example.com",
+    });
+
+    expect(result.deletedSessionCount).toBe(2);
+    expect(result.analyticsDeleted).toBe(4);
+    expect(result.feedbackDeleted).toBe(2);
+    expect(result.calendarDeletionWarnings).toEqual([]);
+
+    expect(await getSession(firstSession.id)).toBeNull();
+    expect(await getSession(secondSession.id)).toBeNull();
+    expect(await resumeIntakeSession(firstSession.resumeToken)).toBeNull();
+    expect(await resumeIntakeSession(secondSession.resumeToken)).toBeNull();
+    expect(await listAnalyticsEvents()).toEqual([]);
+    expect(await listFeedbackEntries()).toEqual([]);
+  });
 });

@@ -32,16 +32,12 @@ export function appBaseUrl() {
   const explicitUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
   const localhostUrl = `http://localhost:${process.env.PORT?.trim() || "3000"}`;
 
-  if (process.env.NODE_ENV !== "production") {
-    if (explicitUrl && isLocalUrl(explicitUrl)) {
-      return explicitUrl;
-    }
-
-    return localhostUrl;
+  if (explicitUrl) {
+    return isLocalUrl(explicitUrl) ? explicitUrl : normalizeUrl(explicitUrl);
   }
 
-  if (explicitUrl) {
-    return explicitUrl;
+  if (process.env.NODE_ENV !== "production") {
+    return localhostUrl;
   }
 
   const vercelProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;

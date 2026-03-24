@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { LaunchPageView } from "@/components/launch/launch-page-view";
 import { GoogleConnectCard } from "@/components/report/google-connect-card";
+import { ReportResetButton } from "@/components/report/report-reset-button";
 import { brandName } from "@/lib/brand";
 import { getAdaptivePlanSummary } from "@/lib/adaptive-plan";
 import { isGoogleAuthConfigured } from "@/lib/env";
@@ -48,11 +49,29 @@ export default async function ReportPage({
   const currentBedtimeTarget = currentPlanView?.bedtimeTarget ?? plan.bedtimeTarget;
   const currentSleepWindow = currentPlanView?.sleepWindow ?? plan.sleepWindow;
   const plainPatternSummary = buildPlainPatternSummary(session.answers);
-  const startingPlanReason = buildStartingPlanReason({
+  const startingPlanReason = sanitizeDisplayCopy(
+    buildStartingPlanReason({
+      answers: session.answers,
+      wakeTime: currentWakeTime,
+      bedtimeTarget: currentBedtimeTarget,
+      sleepWindow: currentSleepWindow,
+    }),
+  ).replace(
+    "We're starting with a tighter time-in-bed window",
+    `We're starting with a tighter ${currentSleepWindow} time-in-bed window`,
+  );
+  const planResponseCards = buildPlanResponseCards({
     answers: session.answers,
     wakeTime: currentWakeTime,
     bedtimeTarget: currentBedtimeTarget,
     sleepWindow: currentSleepWindow,
+    windDownStart: plan.windDownStart,
+    screenCutoff: plan.screenCutoff,
+    caffeineCutoff: plan.caffeineCutoff,
+    mealCutoff: plan.mealCutoff,
+    exerciseWindow: plan.exerciseWindow,
+    napGuidance: plan.napGuidance,
+    weekendGuardrail: plan.weekendGuardrail,
   });
   const tonightActions = buildTonightActions({
     wakeTime: currentWakeTime,
@@ -104,14 +123,14 @@ export default async function ReportPage({
                 value={currentWakeTime}
               />
               <MetricCard
-                label="Starting bedtime"
-                helper="Bedtime target"
-                value={currentBedtimeTarget}
+                label="Wind-down starts"
+                helper="Evening runway"
+                value={plan.windDownStart}
               />
               <MetricCard
-                label="Time set aside for sleep"
-                helper="Protected sleep window"
-                value={currentSleepWindow}
+                label="Sleep time tonight"
+                helper="Starting bedtime"
+                value={currentBedtimeTarget}
               />
             </div>
 
@@ -193,6 +212,35 @@ export default async function ReportPage({
               ))}
             </div>
           ) : null}
+        </StorySection>
+
+        <StorySection
+          eyebrow="What your plan is responding to"
+          title="What else your plan is working on"
+          body="This plan is not only about when you sleep. It is also responding to the patterns around bedtime, being awake in bed, daytime recovery, and the things that can quietly keep sleep from settling."
+          className="bg-[rgba(255,252,246,0.94)]"
+        >
+          <div className="mt-6 grid gap-3 md:grid-cols-2">
+            {planResponseCards.map((card) => (
+              <article
+                key={card.key}
+                className="rounded-[24px] border border-[rgba(31,35,64,.08)] bg-white/90 px-4 py-4 shadow-[0_14px_30px_rgba(31,35,64,0.05)]"
+              >
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
+                  {card.label}
+                </p>
+                <h3 className="mt-2 text-lg font-semibold leading-7 text-[color:var(--foreground)]">
+                  {card.title}
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                  {card.signal}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
+                  <span className="font-semibold">In your plan:</span> {card.response}
+                </p>
+              </article>
+            ))}
+          </div>
         </StorySection>
 
         <StorySection
@@ -319,6 +367,13 @@ export default async function ReportPage({
             </div>
           ) : null}
         </StorySection>
+
+        {authSession?.user?.email ? (
+          <ReportResetButton
+            sessionId={session.id}
+            email={authSession.user.email}
+          />
+        ) : null}
       </div>
     </main>
   );
@@ -445,6 +500,35 @@ function getAnswerValue(
   return Array.isArray(value) ? value[0] : value;
 }
 
+function getAnswerValues(
+  answers: Record<string, string | string[]>,
+  key: string,
+) {
+  const value = answers[key];
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return value ? [value] : [];
+}
+
+function answerIncludes(
+  answers: Record<string, string | string[]>,
+  key: string,
+  expected: string,
+) {
+  return getAnswerValues(answers, key).includes(expected);
+}
+
+function sanitizeDisplayCopy(value: string) {
+  return value
+    .replaceAll("Weâ€™re", "We're")
+    .replaceAll("â€™", "'")
+    .replaceAll("â€“", "-")
+    .replaceAll("â€”", "-");
+}
+
 function buildPlainPatternSummary(answers: Record<string, string | string[]>) {
   const primaryProblem = getAnswerValue(answers, "primary_problem");
   const daytimeImpact = getAnswerValue(answers, "daytime_impact");
@@ -472,6 +556,171 @@ function buildPlainPatternSummary(answers: Record<string, string | string[]>) {
             : "daytime strain";
 
   return `Your answers point most strongly to ${primaryProblemLabel}, with ${impactLabel} around it. The goal now is to make your nights steadier, more predictable, and easier to follow in real life.`;
+}
+
+function buildPlanResponseCards({
+  answers,
+  wakeTime,
+  bedtimeTarget,
+  sleepWindow,
+  windDownStart,
+  screenCutoff,
+  caffeineCutoff,
+  mealCutoff,
+  exerciseWindow,
+  napGuidance,
+  weekendGuardrail,
+}: {
+  answers: Record<string, string | string[]>;
+  wakeTime: string;
+  bedtimeTarget: string;
+  sleepWindow: string;
+  windDownStart: string;
+  screenCutoff: string;
+  caffeineCutoff: string;
+  mealCutoff: string;
+  exerciseWindow: string;
+  napGuidance: string;
+  weekendGuardrail: string;
+}) {
+  const cards: Array<{
+    key: string;
+    label: string;
+    title: string;
+    signal: string;
+    response: string;
+    priority: number;
+  }> = [];
+
+  cards.push({
+    key: "rhythm",
+    label: "Daily rhythm",
+    title: "The plan steadies your timing first",
+    signal:
+      getAnswerValue(answers, "schedule_consistency") === "swings" ||
+      getAnswerValue(answers, "schedule_consistency") === "very_irregular" ||
+      getAnswerValue(answers, "weekend_wake_shift") === "1_2_hours" ||
+      getAnswerValue(answers, "weekend_wake_shift") === "over_2_hours"
+        ? "Your timing looked drifty enough that nights were probably getting mixed signals from the rest of the week."
+        : "Even when sleep is difficult, steadier timing still gives the rest of the plan something firm to build on.",
+    response: `The structure stays anchored to a regular ${wakeTime} wake time and a weekend guardrail of ${weekendGuardrail}.`,
+    priority: 100,
+  });
+
+  if (
+    getAnswerValue(answers, "screen_habit") === "in_bed" ||
+    getAnswerValue(answers, "screen_habit") === "work_late" ||
+    getAnswerValue(answers, "work_after_dinner") === "often" ||
+    getAnswerValue(answers, "work_after_dinner") === "almost_always" ||
+    getAnswerValue(answers, "stress_level") === "racing" ||
+    getAnswerValue(answers, "stress_level") === "very_racing"
+  ) {
+    cards.push({
+      key: "evening",
+      label: "Evening activation",
+      title: "The runway into sleep is part of the plan",
+      signal:
+        "Your answers suggested that the evening stays too active, too connected, or too unfinished before bed.",
+      response: `The plan starts wind-down at ${windDownStart} and pushes screens down by ${screenCutoff} so bedtime is not carrying all the work alone.`,
+      priority: 95,
+    });
+  }
+
+  if (
+    answerIncludes(answers, "bed_use_pattern", "phone_or_tv") ||
+    answerIncludes(answers, "bed_use_pattern", "worrying") ||
+    answerIncludes(answers, "bed_use_pattern", "work") ||
+    getAnswerValue(answers, "awake_response") === "stay_and_try" ||
+    getAnswerValue(answers, "awake_response") === "phone" ||
+    getAnswerValue(answers, "awake_response") === "tv_or_media"
+  ) {
+    cards.push({
+      key: "bed_association",
+      label: "When sleep does not come",
+      title: "The bed itself is part of the training",
+      signal:
+        "Your answers suggest the bed may sometimes be acting more like a place to try, scroll, plan, or stay awake than a place to sleep.",
+      response: `The bedtime guidance keeps the ${sleepWindow} sleep window, but also teaches what to do if you are awake instead of just telling you to stay there and try harder.`,
+      priority: 94,
+    });
+  }
+
+  if (
+    getAnswerValue(answers, "caffeine_timing") === "late_afternoon" ||
+    getAnswerValue(answers, "caffeine_timing") === "evening" ||
+    getAnswerValue(answers, "caffeine_amount") === "high" ||
+    getAnswerValue(answers, "alcohol_timing") === "most_evenings" ||
+    getAnswerValue(answers, "alcohol_timing") === "close_to_bed" ||
+    getAnswerValue(answers, "dinner_timing") === "under_2_hours" ||
+    getAnswerValue(answers, "dinner_timing") === "very_late"
+  ) {
+    cards.push({
+      key: "inputs",
+      label: "Inputs and timing",
+      title: "Late inputs are treated like part of the sleep system",
+      signal:
+        "Caffeine, alcohol, or late meals looked active enough in your answers that they could not be left out of the plan.",
+      response: `Your plan uses a caffeine cutoff of ${caffeineCutoff} and a meal boundary by ${mealCutoff} so the night has less to fight through.`,
+      priority: 92,
+    });
+  }
+
+  if (
+    getAnswerValue(answers, "naps") === "frequent_short" ||
+    getAnswerValue(answers, "naps") === "frequent_long" ||
+    getAnswerValue(answers, "exercise_timing") === "rarely" ||
+    getAnswerValue(answers, "exercise_timing") === "evening"
+  ) {
+    cards.push({
+      key: "daytime_recovery",
+      label: "Daytime recovery",
+      title: "The daytime side of sleep pressure is included too",
+      signal:
+        "Your answers suggested that naps or the current movement pattern could be weakening the pressure that helps sleep happen at night.",
+      response: `The plan keeps movement around ${exerciseWindow} and handles naps as ${napGuidance}.`,
+      priority: 90,
+    });
+  }
+
+  if (
+    answerIncludes(answers, "sleep_thoughts", "clock_watching") ||
+    answerIncludes(answers, "sleep_thoughts", "pressure") ||
+    answerIncludes(answers, "sleep_thoughts", "catastrophic") ||
+    getAnswerValue(answers, "relaxation_experience") === "many_failed" ||
+    getAnswerValue(answers, "relaxation_experience") === "inconsistent"
+  ) {
+    cards.push({
+      key: "mind_racing",
+      label: "Mind and body at night",
+      title: "The plan is not only about timing",
+      signal:
+        "Your answers showed that pressure, clock-checking, spiraling thoughts, or skepticism about calming practices are part of the night too.",
+      response: `The calendar rotates wind-down and in-bed guidance around your ${bedtimeTarget} sleep time instead of repeating one generic technique.`,
+      priority: 89,
+    });
+  }
+
+  if (
+    !answerIncludes(answers, "sleep_environment", "none") ||
+    getAnswerValue(answers, "sleep_medication") === "regular_otc" ||
+    getAnswerValue(answers, "sleep_medication") === "regular_prescription" ||
+    !answerIncludes(answers, "red_flags", "none")
+  ) {
+    cards.push({
+      key: "context",
+      label: "Context around sleep",
+      title: "The plan keeps real-life context in view",
+      signal:
+        "Your answers included sleep-setting or safety context that should stay visible instead of pretending timing is the whole story.",
+      response:
+        "The report keeps those factors on the table so the plan feels grounded in the real situation around your nights.",
+      priority: 80,
+    });
+  }
+
+  return cards
+    .sort((left, right) => right.priority - left.priority)
+    .slice(0, 6);
 }
 
 function parseTimeToMinutes(value?: string) {

@@ -19,12 +19,17 @@ import {
   syncCalendarProgram,
 } from "@/lib/integrations";
 import { feedbackFollowUpDelayHours } from "@/lib/brand";
-import { hasFeedbackForSession, recordAnalyticsEvent } from "@/lib/launch-data";
+import {
+  deleteLaunchDataForSessions,
+  hasFeedbackForSession,
+  recordAnalyticsEvent,
+} from "@/lib/launch-data";
 import { buildGeneratedPlan, buildSleepProfile } from "@/lib/plan-engine";
 import { buildReportPlanView } from "@/lib/report-plan";
 import { getQuestionById, normaliseAnswer } from "@/lib/questionnaire";
 import { buildGeneratedReport } from "@/lib/report";
 import {
+  deleteSessions,
   getStoredGoogleAccount,
   getSessionById,
   getSessionByResumeToken,
@@ -93,6 +98,10 @@ async function resolveGoogleAuthContext(
         expiresAt: authContext?.expiresAt ?? storedAccount?.expires_at,
       }
     : undefined;
+}
+
+function normalizeEmail(value?: string | null) {
+  return value?.trim().toLowerCase();
 }
 
 async function refreshDailyCheckInState(
@@ -570,6 +579,88 @@ export async function removeGoogleCalendar(
   return {
     session: updatedSession,
     deleteResult,
+  };
+}
+
+export async function resetUserData(
+  sessionId: string,
+  authContext?: GoogleAuthContext,
+) {
+  const currentSession = await getSessionById(sessionId);
+
+  if (!currentSession) {
+    throw new Error("Session not found");
+  }
+
+  let session = currentSession;
+
+  if (authContext?.userId || authContext?.email) {
+    session = await linkSessionToUser(currentSession, authContext);
+  }
+
+  if (
+    authContext?.userId &&
+    (authContext.accessToken || authContext.refreshToken || authContext.expiresAt)
+  ) {
+    await updateStoredGoogleAccountTokens(authContext.userId, authContext);
+  }
+
+  const ownerUserId = authContext?.userId ?? session.userId;
+  const ownerEmail = normalizeEmail(authContext?.email ?? session.email);
+
+  if (!ownerUserId && !ownerEmail) {
+    throw new Error("A connected email is required to reset this account.");
+  }
+
+  const allSessions = await listSessions();
+  const targetSessions = allSessions.filter((candidate) => {
+    if (ownerUserId && candidate.userId === ownerUserId) {
+      return true;
+    }
+
+    return Boolean(
+      ownerEmail && normalizeEmail(candidate.email) === ownerEmail,
+    );
+  });
+
+  if (!targetSessions.length) {
+    return {
+      deletedSessionCount: 0,
+      analyticsDeleted: 0,
+      feedbackDeleted: 0,
+      calendarDeletionWarnings: [] as string[],
+    };
+  }
+
+  const mergedAuthContext = await resolveGoogleAuthContext(session, authContext);
+  const calendarDeletionWarnings: string[] = [];
+
+  if (mergedAuthContext) {
+    for (const candidate of targetSessions) {
+      if (!candidate.calendarExternalId) {
+        continue;
+      }
+
+      const deleteResult = await deleteCalendarProgram(candidate, mergedAuthContext);
+
+      if (deleteResult.status !== "deleted") {
+        calendarDeletionWarnings.push(candidate.id);
+      }
+    }
+  }
+
+  const sessionIds = targetSessions.map((candidate) => candidate.id);
+  const launchDeleteResult = await deleteLaunchDataForSessions({
+    sessionIds,
+    email: ownerEmail,
+  });
+  const deletedSessionCount = await deleteSessions(sessionIds);
+
+  return {
+    deletedSessionCount,
+    analyticsDeleted: launchDeleteResult.analyticsDeleted,
+    feedbackDeleted: launchDeleteResult.feedbackDeleted,
+    calendarDeletionWarnings,
   };
 }
 

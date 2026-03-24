@@ -3,6 +3,7 @@ import type { Account as PrismaAccount, IntakeSessionRecord } from "@prisma/clie
 
 import { prisma } from "@/lib/prisma";
 import {
+  deleteSessions as deleteStoredSessions,
   getSessionById as getStoredSessionById,
   getSessionByResumeToken as getStoredSessionByResumeToken,
   listSessions as listStoredSessions,
@@ -130,6 +131,26 @@ export async function listSessions() {
 
   const records = await prisma.intakeSessionRecord.findMany();
   return records.map(serialiseSession);
+}
+
+export async function deleteSessions(sessionIds: string[]) {
+  if (!sessionIds.length) {
+    return 0;
+  }
+
+  if (!prisma) {
+    return deleteStoredSessions(sessionIds);
+  }
+
+  const result = await prisma.intakeSessionRecord.deleteMany({
+    where: {
+      id: {
+        in: sessionIds,
+      },
+    },
+  });
+
+  return result.count;
 }
 
 export async function linkSessionToUser(

@@ -58,3 +58,27 @@ export async function listSessions() {
   const store = await readStore();
   return Object.values(store.sessions);
 }
+
+export async function deleteSessions(sessionIds: string[]) {
+  if (!sessionIds.length) {
+    return 0;
+  }
+
+  const store = await readStore();
+  let deleted = 0;
+
+  for (const sessionId of sessionIds) {
+    const session = store.sessions[sessionId];
+
+    if (!session) {
+      continue;
+    }
+
+    deleted += 1;
+    delete store.sessions[sessionId];
+    delete store.resumeIndex[session.resumeToken];
+  }
+
+  await writeStore(store);
+  return deleted;
+}
