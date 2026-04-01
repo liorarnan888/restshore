@@ -1,14 +1,28 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { ArrowRight } from "lucide-react";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { ContinueWithGoogleButton } from "@/components/launch/continue-with-google-button";
 import { LaunchPageView } from "@/components/launch/launch-page-view";
-import { appSupportPromise, betaLabel, brandName } from "@/lib/brand";
+import {
+  adultOnlyPromise,
+  appSupportPromise,
+  betaLabel,
+  brandName,
+  safetyScopePromise,
+} from "@/lib/brand";
 import { isGoogleAuthConfigured } from "@/lib/env";
+import { buildPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = buildPageMetadata({
+  title: `${brandName} | CBT-I-informed sleep support`,
+  description:
+    "RestShore turns your answers into a 6-week starting plan, a shareable sleep summary, and optional calendar guidance you can actually follow.",
+  path: "/",
+});
 
 const steps = [
   {
@@ -106,20 +120,42 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="max-w-3xl rounded-[8px] border-l-2 border-[rgba(31,35,64,.12)] pl-5">
+        <section className="max-w-4xl rounded-[30px] border border-[rgba(31,35,64,.08)] bg-[rgba(255,255,255,0.72)] p-5 shadow-[0_16px_34px_rgba(31,35,64,0.05)]">
           <p className="text-xs font-medium uppercase tracking-[0.22em] text-[color:var(--teal)]">
-            Why this exists
+            From advice to a plan
           </p>
           <h2 className="display mt-3 text-3xl leading-[1.04] text-[color:var(--foreground)]">
-            The method is not the problem. Getting it into real life is.
+            The value is not more sleep advice. It is a plan you can actually use.
           </h2>
-          <div className="mt-5 grid gap-4 text-base leading-7 text-[color:var(--muted)]">
-            <p>
-              People do not just need to hear that sleep needs structure. They need a structure that fits their own pattern, arrives in a usable form, and is easier to follow when the night gets hard.
-            </p>
-            <p>
-              That is the job of RestShore: take what usually gets spread across appointments, notes, and recommendations, and turn it into something concrete, personal, and easier to carry into daily life.
-            </p>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {[
+              {
+                before: "Generic sleep advice",
+                after: "A personal starting plan built from your answers",
+              },
+              {
+                before: "Scattered notes and fuzzy memory",
+                after: "A shareable sleep summary you can revisit or share if you choose",
+              },
+              {
+                before: "Trying to remember the structure",
+                after: "Optional calendar guidance that carries the plan into real life",
+              },
+            ].map((item) => (
+              <article
+                key={item.before}
+                className="rounded-[22px] border border-[rgba(31,35,64,.08)] bg-white/88 px-4 py-4"
+              >
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--muted)]">
+                  Before
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">{item.before}</p>
+                <p className="mt-4 text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--teal)]">
+                  After
+                </p>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--foreground)]">{item.after}</p>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -166,8 +202,22 @@ export default function Home() {
                 {appSupportPromise}
               </p>
               <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                Public-facing content is educational and behavioral in nature. It is not medical care, diagnosis, or emergency support.
+                {adultOnlyPromise} {safetyScopePromise}
               </p>
+              <div className="mt-4 flex flex-wrap gap-3 text-sm text-[color:var(--muted)]">
+                <Link href="/guides" className="transition hover:text-[color:var(--foreground)]">
+                  Browse guides
+                </Link>
+                <Link href="/what-is-cbti" className="transition hover:text-[color:var(--foreground)]">
+                  What CBT-I is
+                </Link>
+                <Link href="/sleep-diary" className="transition hover:text-[color:var(--foreground)]">
+                  Sleep diary guide
+                </Link>
+                <Link href="/who-restshore-is-for" className="transition hover:text-[color:var(--foreground)]">
+                  Who RestShore is for
+                </Link>
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-4 text-sm text-[color:var(--muted)]">

@@ -54,6 +54,7 @@ type LaunchAttribution = {
   visitorId?: string;
   route?: string;
   referrer?: string;
+  metadata?: Record<string, unknown>;
 };
 
 async function trackLaunchEvent(
@@ -238,6 +239,7 @@ export async function startIntakeSession(
     referrer: attribution?.referrer,
     metadata: {
       timezone,
+      ...attribution?.metadata,
     },
   });
   return session;

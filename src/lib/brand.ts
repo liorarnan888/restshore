@@ -2,9 +2,12 @@ export const brandName = "RestShore";
 export const brandTagline = "A calmer, structured way to rebuild sleep";
 export const betaLabel = "Free public beta";
 export const brandDescription =
-  "A CBT-I informed sleep coaching beta that turns your answers into a 6-week plan, a doctor-ready sleep report, and optional calendar guidance you can actually follow.";
+  "A CBT-I informed behavioral sleep-support beta that turns your answers into a 6-week plan, a shareable sleep summary, and optional calendar guidance you can actually follow.";
 export const appSupportPromise =
   "RestShore is a behavioral support product, not medical care, diagnosis, or emergency help.";
+export const adultOnlyPromise = "RestShore is intended for adults 18+ only.";
+export const safetyScopePromise =
+  "Some people should get clinician clearance first, especially if loud snoring, choking, mania symptoms, pregnancy or postpartum changes, seizures, parasomnias, or crisis concerns are part of the picture.";
 export const betaFeedbackMessage =
   "This beta is free while we learn from early users. We read every thoughtful piece of feedback.";
 export const feedbackFollowUpDelayHours = 36;

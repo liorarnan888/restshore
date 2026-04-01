@@ -8,11 +8,14 @@ import {
   supportEmail,
   supportMailto,
 } from "@/lib/brand";
+import { buildPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: `Terms | ${brandName}`,
   description: `Plain-language terms for using the ${brandName} free public beta.`,
-};
+  path: "/terms",
+  index: false,
+});
 
 export default function TermsPage() {
   return (

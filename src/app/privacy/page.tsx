@@ -7,11 +7,14 @@ import {
   supportEmail,
   supportMailto,
 } from "@/lib/brand";
+import { buildPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: `Privacy | ${brandName}`,
   description: `How ${brandName} handles intake answers, email delivery, calendar integrations, analytics, and beta feedback.`,
-};
+  path: "/privacy",
+  index: false,
+});
 
 export default function PrivacyPage() {
   return (

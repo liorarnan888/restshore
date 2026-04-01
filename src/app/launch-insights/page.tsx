@@ -1,14 +1,57 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { brandName } from "@/lib/brand";
 import { listAnalyticsEvents, listFeedbackEntries } from "@/lib/launch-data";
+import { buildPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = buildPageMetadata({
+  title: `${brandName} launch insights`,
+  description: "Internal launch metrics and feedback dashboard.",
+  path: "/launch-insights",
+  index: false,
+});
 
 function countByEvent(events: Awaited<ReturnType<typeof listAnalyticsEvents>>) {
   return events.reduce<Record<string, number>>((accumulator, event) => {
     accumulator[event.eventType] = (accumulator[event.eventType] ?? 0) + 1;
     return accumulator;
   }, {});
+}
+
+function metadataValue(
+  event: Awaited<ReturnType<typeof listAnalyticsEvents>>[number],
+  key: string,
+) {
+  const value = event.metadata?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function isOrganicEvent(event: Awaited<ReturnType<typeof listAnalyticsEvents>>[number]) {
+  return metadataValue(event, "firstTouchChannel") === "organic_search";
+}
+
+function topOrganicLandingPages(events: Awaited<ReturnType<typeof listAnalyticsEvents>>) {
+  const counts = new Map<string, number>();
+
+  for (const event of events) {
+    if (event.eventType !== "page_view" || !isOrganicEvent(event)) {
+      continue;
+    }
+
+    const landingPath = metadataValue(event, "firstTouchLandingPath");
+
+    if (!landingPath) {
+      continue;
+    }
+
+    counts.set(landingPath, (counts.get(landingPath) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 8);
 }
 
 function percent(numerator: number, denominator: number) {
@@ -45,6 +88,12 @@ export default async function LaunchInsightsPage({
   const calendarConnects = counts.calendar_connected ?? 0;
   const firstCheckIns = counts.first_checkin_submitted ?? 0;
   const feedbackSubmissions = counts.feedback_submitted ?? 0;
+  const organicEvents = events.filter(isOrganicEvent);
+  const organicCounts = countByEvent(organicEvents);
+  const organicLandingPages = topOrganicLandingPages(events);
+  const organicReportViews = organicEvents.filter(
+    (event) => event.eventType === "page_view" && event.route?.startsWith("/report/"),
+  ).length;
 
   return (
     <main className="relative overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
@@ -101,6 +150,21 @@ export default async function LaunchInsightsPage({
               value: feedbackSubmissions,
               detail: `${percent(feedbackSubmissions, pageViews)} of page views`,
             },
+            {
+              label: "Organic visits",
+              value: organicCounts.page_view ?? 0,
+              detail: "Page views with organic-search first touch",
+            },
+            {
+              label: "Organic starts",
+              value: organicCounts.intake_started ?? 0,
+              detail: `${percent(organicCounts.intake_started ?? 0, organicCounts.page_view ?? 0)} of organic page views`,
+            },
+            {
+              label: "Organic report views",
+              value: organicReportViews,
+              detail: "Report page views tied to organic first touch",
+            },
           ].map((card) => (
             <article
               key={card.label}
@@ -120,6 +184,36 @@ export default async function LaunchInsightsPage({
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <article className="glass-panel editorial-card rounded-[32px] border border-white/75 p-6">
+            <h2 className="display text-3xl text-[color:var(--foreground)]">
+              Organic landing pages
+            </h2>
+            <div className="mt-5 grid gap-3">
+              {organicLandingPages.length ? (
+                organicLandingPages.map(([path, count]) => (
+                  <article
+                    key={path}
+                    className="rounded-[22px] border border-[color:var(--line)] bg-white/90 p-4"
+                  >
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--teal)]">
+                      Organic landing page
+                    </p>
+                    <p className="mt-2 text-sm font-medium text-[color:var(--foreground)]">
+                      {path}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                      {count} organic first-touch page views
+                    </p>
+                  </article>
+                ))
+              ) : (
+                <p className="text-sm leading-6 text-[color:var(--muted)]">
+                  Organic landing data will appear once visitors arrive from search.
+                </p>
+              )}
+            </div>
+          </article>
+
           <article className="glass-panel editorial-card rounded-[32px] border border-white/75 p-6">
             <h2 className="display text-3xl text-[color:var(--foreground)]">
               Recent feedback

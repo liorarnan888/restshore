@@ -8,6 +8,7 @@ const schema = z.object({
   visitorId: z.string().optional(),
   route: z.string().optional(),
   referrer: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export async function POST(request: Request) {
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     visitorId: body.visitorId,
     route: body.route,
     referrer: body.referrer ?? request.headers.get("referer") ?? undefined,
+    metadata: body.metadata,
   });
   return NextResponse.json({ session });
 }

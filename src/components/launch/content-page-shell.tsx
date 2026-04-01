@@ -26,8 +26,8 @@ export function ContentPageShell({
   return (
     <main className="relative overflow-hidden px-4 py-4 sm:px-6 lg:px-8">
       {route ? <LaunchPageView route={route} metadata={{ surface: "content_page" }} /> : null}
-      <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col gap-4">
-        <header className="flex items-center justify-between rounded-full border border-white/60 bg-white/55 px-4 py-3 text-sm text-[color:var(--muted)] shadow-[0_18px_40px_rgba(31,35,64,0.08)] backdrop-blur md:px-5">
+      <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6">
+        <header className="flex flex-wrap items-center justify-between gap-3 rounded-[30px] border border-white/60 bg-white/55 px-4 py-3 text-sm text-[color:var(--muted)] shadow-[0_18px_40px_rgba(31,35,64,0.08)] backdrop-blur md:px-5">
           <div className="flex items-center gap-3">
             <BrandLogo variant="mark" className="h-10 w-10 shrink-0" priority />
             <div>
@@ -37,33 +37,32 @@ export function ContentPageShell({
               <p className="text-xs">{betaLabel}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em]">
-            <Link href="/support" className="rounded-full border border-[color:var(--line)] bg-white/80 px-4 py-2 text-[color:var(--foreground)]">
+          <div className="flex flex-wrap items-center gap-4 text-xs font-medium uppercase tracking-[0.14em] text-[color:var(--muted)]">
+            <Link href="/guides" className="transition hover:text-[color:var(--foreground)]">
+              Guides
+            </Link>
+            <Link href="/support" className="transition hover:text-[color:var(--foreground)]">
               Support
             </Link>
-            <Link href="/" className="rounded-full border border-[color:var(--line)] bg-white/80 px-4 py-2 text-[color:var(--foreground)]">
+            <Link href="/" className="transition hover:text-[color:var(--foreground)]">
               Home
             </Link>
           </div>
         </header>
 
-        <section className="glass-panel editorial-card rounded-[36px] border border-white/75 p-6 sm:p-8">
+        <section className="glass-panel editorial-card rounded-[36px] border border-white/75 p-7 sm:p-10">
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">
             {eyebrow}
           </p>
           <h1 className="display mt-3 text-4xl leading-tight text-[color:var(--foreground)] sm:text-5xl">
             {title}
           </h1>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-[color:var(--muted)]">
+          <p className="mt-4 max-w-3xl text-base leading-8 text-[color:var(--muted)]">
             {lede}
           </p>
         </section>
 
-        <section className="glass-panel editorial-card rounded-[36px] border border-white/75 p-6 sm:p-8">
-          <div className="grid gap-6 text-sm leading-7 text-[color:var(--foreground)]">
-            {children}
-          </div>
-        </section>
+        <div className="grid gap-7 text-sm leading-7 text-[color:var(--foreground)]">{children}</div>
 
         <section className="grid gap-4 pb-8 sm:grid-cols-2">
           <article className="glass-panel editorial-card rounded-[28px] border border-white/75 p-6">
@@ -75,10 +74,10 @@ export function ContentPageShell({
               a calmer calendar structure, and a reusable sleep summary.
             </p>
             <Link
-              href="/"
+              href="/start"
               className="mt-5 inline-flex rounded-full bg-[linear-gradient(90deg,var(--accent-strong),var(--accent))] px-5 py-3 font-medium text-white shadow-[0_18px_32px_rgba(235,93,52,.24)] transition hover:-translate-y-0.5"
             >
-              Start the intake
+              Start the questionnaire
             </Link>
           </article>
           <article className="glass-panel editorial-card rounded-[28px] border border-white/75 p-6">

@@ -9,12 +9,15 @@ import {
   supportEmail,
   supportMailto,
 } from "@/lib/brand";
+import { buildPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: `Support | ${brandName}`,
   description:
     `How to contact ${brandName}, remove Google Calendar access, request data deletion, and get help with your sleep plan.`,
-};
+  path: "/support",
+  index: false,
+});
 
 export default function SupportPage() {
   return (

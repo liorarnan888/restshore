@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import type { Metadata } from "next";
 import { format } from "date-fns";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
@@ -13,8 +14,15 @@ import {
   TEST_CENTER_ACCESS_COOKIE_NAME,
   verifyTestCenterAccessToken,
 } from "@/lib/test-center-access";
+import { buildPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = buildPageMetadata({
+  title: `${brandName} Test Center`,
+  description: "Internal QA surface for RestShore.",
+  path: "/test-center",
+  index: false,
+});
 
 function formatTimestamp(value?: string) {
   if (!value) {

@@ -13,6 +13,7 @@ import {
 
 import { betaLabel } from "@/lib/brand";
 import {
+  getOrCreateFirstTouchContext,
   getOrCreateLaunchVisitorId,
   readStoredResumeToken,
   writeStoredResumeToken,
@@ -190,6 +191,7 @@ export function IntakeExperience({ route = "/" }: { route?: string }) {
           visitorId: getOrCreateLaunchVisitorId(),
           route,
           referrer: document.referrer || undefined,
+          metadata: getOrCreateFirstTouchContext(),
         };
 
         let loadedSession: IntakeSession;

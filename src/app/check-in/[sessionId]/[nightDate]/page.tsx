@@ -1,10 +1,19 @@
+import type { Metadata } from "next";
+
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { DailyCheckInExperience } from "@/components/checkin/daily-checkin-experience";
 import { getDailyCheckIn } from "@/lib/session-service";
 import { brandName } from "@/lib/brand";
 import { LaunchPageView } from "@/components/launch/launch-page-view";
+import { buildPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = buildPageMetadata({
+  title: `${brandName} check-in`,
+  description: "Private daily sleep log for an existing RestShore plan.",
+  path: "/check-in",
+  index: false,
+});
 
 export default async function DailyCheckInPage({
   params,

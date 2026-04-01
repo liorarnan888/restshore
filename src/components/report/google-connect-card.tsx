@@ -14,8 +14,10 @@ import {
 import { signIn, signOut } from "next-auth/react";
 
 import {
+  adultOnlyPromise,
   appSupportPromise,
   brandName,
+  safetyScopePromise,
   supportEmail,
   supportMailto,
 } from "@/lib/brand";
@@ -711,6 +713,9 @@ export function GoogleConnectCard({
                 ? "Reconnect Google if you want to keep syncing this calendar or manage it from here."
                 : "Google is optional. Connect it only if you want this plan on your calendar."}
             </p>
+            <p className="text-sm leading-6 text-[color:var(--muted)]">
+              RestShore only asks for the Google access needed to create and manage its dedicated calendar in your account. It is not meant to replace clinician care or emergency support.
+            </p>
           </div>
         ) : (
           <div className="flex flex-wrap gap-3">
@@ -784,7 +789,7 @@ export function GoogleConnectCard({
         ) : null}
 
         <p className="text-sm leading-6 text-[color:var(--muted)]">
-          {appSupportPromise} Questions about Google access or removing your calendar? Contact{" "}
+          {appSupportPromise} {adultOnlyPromise} {safetyScopePromise} Questions about Google access or removing your calendar? Contact{" "}
           <a
             href={supportMailto("RestShore Google calendar question")}
             className="font-medium text-[color:var(--foreground)] underline decoration-[color:var(--line)] underline-offset-4"

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { Metadata } from "next";
 import { ShieldAlert } from "lucide-react";
 import { notFound } from "next/navigation";
 
@@ -6,13 +7,20 @@ import { auth } from "@/auth";
 import { LaunchPageView } from "@/components/launch/launch-page-view";
 import { GoogleConnectCard } from "@/components/report/google-connect-card";
 import { ReportResetButton } from "@/components/report/report-reset-button";
-import { brandName } from "@/lib/brand";
+import { appSupportPromise, brandName, safetyScopePromise } from "@/lib/brand";
 import { getAdaptivePlanSummary } from "@/lib/adaptive-plan";
 import { isGoogleAuthConfigured } from "@/lib/env";
+import { buildPageMetadata } from "@/lib/seo";
 import { getSession } from "@/lib/session-service";
 import type { GeneratedPlan, ProgramEvent, ReportSection } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = buildPageMetadata({
+  title: `${brandName} report`,
+  description: "Private RestShore sleep plan and summary.",
+  path: "/report",
+  index: false,
+});
 
 export default async function ReportPage({
   params,
@@ -40,7 +48,7 @@ export default async function ReportPage({
     report.sections,
     "What appears to be keeping the problem going",
   );
-  const doctorSummaryBody =
+  const reusableSummaryBody =
     findSection(report.sections, "If you decide to get outside help")?.body ??
     `If you ever want outside support, this ${brandName} summary gives you a clearer starting point than trying to describe the whole pattern from memory.`;
   const reportPlanView = plan.reportView;
@@ -166,6 +174,18 @@ export default async function ReportPage({
                   ))}
                 </div>
               </article>
+            </div>
+
+            <div className="mt-5 rounded-[24px] border border-[rgba(31,35,64,.08)] bg-[rgba(255,255,255,0.84)] px-4 py-4">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--teal)]">
+                Safety and scope
+              </p>
+              <p className="mt-3 text-sm leading-6 text-[color:var(--foreground)]">
+                {appSupportPromise}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
+                {safetyScopePromise}
+              </p>
             </div>
 
             <div className="mt-5">
@@ -336,9 +356,9 @@ export default async function ReportPage({
         ) : null}
 
         <StorySection
-          eyebrow="Doctor-ready summary"
-          title="A version you can reuse if you need outside help"
-          body={doctorSummaryBody}
+          eyebrow="Shareable sleep summary"
+          title="A version you can reuse if you want outside help"
+          body={reusableSummaryBody}
         >
           <article className="mt-6 rounded-[24px] border border-[rgba(31,35,64,.08)] bg-[rgba(255,249,241,0.92)] px-5 py-5">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-[color:var(--teal)]">

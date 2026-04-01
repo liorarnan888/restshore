@@ -1,19 +1,25 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { IntakeExperience } from "@/components/intake/intake-experience";
 import { LaunchPageView } from "@/components/launch/launch-page-view";
+import {
+  adultOnlyPromise,
+  appSupportPromise,
+  safetyScopePromise,
+} from "@/lib/brand";
+import { buildPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
+export const metadata: Metadata = buildPageMetadata({
   title: "Sleep Questionnaire | RestShore",
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
+  description: "Private questionnaire entry for building a RestShore plan.",
+  path: "/start",
+  index: false,
+});
 
 export default function StartPage() {
   return (
@@ -43,6 +49,15 @@ export default function StartPage() {
         </header>
 
         <section className="pb-6">
+          <div className="mb-3 rounded-[24px] border border-[rgba(31,35,64,.08)] bg-[rgba(255,248,239,0.82)] px-4 py-4 text-sm leading-6 text-[color:var(--foreground)] shadow-[0_12px_26px_rgba(31,35,64,0.05)]">
+            <p className="font-medium text-[color:var(--foreground)]">
+              Before you continue
+            </p>
+            <p className="mt-2 text-[color:var(--muted)]">
+              {appSupportPromise} {adultOnlyPromise}
+            </p>
+            <p className="mt-2 text-[color:var(--muted)]">{safetyScopePromise}</p>
+          </div>
           <IntakeExperience route="/start" />
         </section>
       </div>

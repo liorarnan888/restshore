@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Fraunces, Space_Grotesk } from "next/font/google";
 
+import { StructuredData } from "@/components/seo/structured-data";
 import { appBaseUrl, brandDescription, brandName } from "@/lib/brand";
+import { buildOrganizationJsonLd, buildWebSiteJsonLd } from "@/lib/seo";
 
 import "./globals.css";
 
@@ -19,6 +21,9 @@ export const metadata: Metadata = {
   metadataBase: new URL(appBaseUrl()),
   title: brandName,
   description: brandDescription,
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION,
+  },
   icons: {
     icon: "/restshore/logo-badge.svg",
     shortcut: "/restshore/logo-badge.svg",
@@ -54,6 +59,8 @@ export default function RootLayout({
       <body
         className={`${spaceGrotesk.variable} ${fraunces.variable} antialiased`}
       >
+        <StructuredData data={buildOrganizationJsonLd()} />
+        <StructuredData data={buildWebSiteJsonLd()} />
         {children}
       </body>
     </html>

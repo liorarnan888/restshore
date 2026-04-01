@@ -2,6 +2,7 @@
 
 const visitorStorageKey = "restshore-launch-visitor-id";
 const resumeStorageKey = "restshore-resume-token";
+const firstTouchStorageKey = "restshore-launch-first-touch";
 
 function readStorage(key: string) {
   if (typeof window === "undefined") {
@@ -49,6 +50,94 @@ export function writeStoredResumeToken(token: string) {
   writeStorage(resumeStorageKey, token);
 }
 
+function inferTrafficSource(referrer: string, utmMedium?: string | null) {
+  if (utmMedium?.toLowerCase() === "organic") {
+    return {
+      firstTouchChannel: "organic_search",
+      firstTouchSource: "utm",
+    };
+  }
+
+  if (!referrer) {
+    return {
+      firstTouchChannel: "direct",
+      firstTouchSource: "direct",
+    };
+  }
+
+  try {
+    const host = new URL(referrer).hostname.replace(/^www\./, "");
+
+    if (
+      host.includes("google.") ||
+      host.includes("bing.com") ||
+      host.includes("duckduckgo.com") ||
+      host.includes("search.yahoo.com")
+    ) {
+      return {
+        firstTouchChannel: "organic_search",
+        firstTouchSource: host,
+      };
+    }
+
+    if (
+      host.includes("reddit.com") ||
+      host.includes("x.com") ||
+      host.includes("twitter.com") ||
+      host.includes("linkedin.com") ||
+      host.includes("facebook.com")
+    ) {
+      return {
+        firstTouchChannel: "social",
+        firstTouchSource: host,
+      };
+    }
+
+    return {
+      firstTouchChannel: "referral",
+      firstTouchSource: host,
+    };
+  } catch {
+    return {
+      firstTouchChannel: "unknown",
+      firstTouchSource: "unknown",
+    };
+  }
+}
+
+export function getOrCreateFirstTouchContext() {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  const existing = readStorage(firstTouchStorageKey);
+
+  if (existing) {
+    try {
+      return JSON.parse(existing) as Record<string, unknown>;
+    } catch {
+      // Ignore malformed local data and replace it below.
+    }
+  }
+
+  const currentUrl = new URL(window.location.href);
+  const referrer = document.referrer || "";
+  const utmSource = currentUrl.searchParams.get("utm_source");
+  const utmMedium = currentUrl.searchParams.get("utm_medium");
+  const utmCampaign = currentUrl.searchParams.get("utm_campaign");
+  const inferred = inferTrafficSource(referrer, utmMedium);
+  const context = {
+    firstTouchLandingPath: currentUrl.pathname,
+    firstTouchReferrer: referrer || undefined,
+    firstTouchSource: utmSource ?? inferred.firstTouchSource,
+    firstTouchChannel: utmMedium ?? inferred.firstTouchChannel,
+    firstTouchCampaign: utmCampaign ?? undefined,
+  };
+
+  writeStorage(firstTouchStorageKey, JSON.stringify(context));
+  return context;
+}
+
 export async function recordClientAnalytics(input: {
   eventType:
     | "page_view"
@@ -68,6 +157,7 @@ export async function recordClientAnalytics(input: {
   }
 
   try {
+    const firstTouch = getOrCreateFirstTouchContext();
     await fetch("/api/analytics", {
       method: "POST",
       headers: {
@@ -79,7 +169,10 @@ export async function recordClientAnalytics(input: {
         visitorId: getOrCreateLaunchVisitorId(),
         route: input.route ?? `${window.location.pathname}${window.location.search}`,
         referrer: document.referrer || undefined,
-        metadata: input.metadata,
+        metadata: {
+          ...firstTouch,
+          ...input.metadata,
+        },
       }),
     });
   } catch {
